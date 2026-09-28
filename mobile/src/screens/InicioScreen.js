@@ -1,6 +1,7 @@
 import { View, Text, ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
 import BotaoGrande from '../components/BotaoGrande';
 import { TAMANHOS } from '../theme';
+import { API_URL } from '../config';
 
 export default function InicioScreen({
   tema,
@@ -37,6 +38,10 @@ export default function InicioScreen({
           <Text style={[estilos.textoCaixa, { color: tema.texto }]}>
             O serviço de leitura não está respondendo. Verifique a internet.
           </Text>
+          {/* Ajuda a quem está configurando: mostra o endereço que o app está usando */}
+          <Text style={[estilos.endereco, { color: tema.texto }]} selectable>
+            Endereço: {API_URL}
+          </Text>
           <BotaoGrande tema={tema} secundario rotulo="Tentar de novo" dica="Verifica a conexão outra vez" aoTocar={aoTentarServidor} />
         </View>
       ) : null}
@@ -68,4 +73,5 @@ const estilos = StyleSheet.create({
   textoCaixa: { fontSize: 22, fontWeight: 'bold', marginBottom: 16 },
   caixaErro: { paddingBottom: 16, marginBottom: 24 },
   dica: { fontSize: 20, textAlign: 'center', marginTop: 8 },
+  endereco: { fontSize: 16, marginTop: -8, marginBottom: 16 },
 });
