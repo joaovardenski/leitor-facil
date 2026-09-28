@@ -1,0 +1,23 @@
+{
+  "name": "leitor-facil-server",
+  "version": "0.1.0",
+  "description": "API do Leitor Fácil: recebe a foto de um documento, trata a imagem e devolve o texto via OCR.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@tesseract.js-data/por": "^1.0.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "multer": "^2.4.0",
+    "sharp": "^0.35.5",
+    "tesseract.js": "^7.0.0"
+  }
+}
