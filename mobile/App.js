@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, BackHandler, AccessibilityInfo } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
@@ -8,7 +8,7 @@ import InicioScreen from './src/screens/InicioScreen';
 import ResultadoScreen from './src/screens/ResultadoScreen';
 import HistoricoScreen from './src/screens/HistoricoScreen';
 import { TEMAS } from './src/theme';
-import { lerFoto } from './src/api';
+import { lerFoto, verificarServidor } from './src/api';
 import { falar } from './src/fala';
 import { iniciarBanco, carregarPreferencias, salvarPreferencia, salvarLeitura, PREFERENCIAS_PADRAO } from './src/db';
 
@@ -19,11 +19,29 @@ export default function App() {
   const [leitura, setLeitura] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
+  const [servidorOk, setServidorOk] = useState(null); // null = ainda verificando
+
+  const checarServidor = useCallback(async () => {
+    setServidorOk(await verificarServidor());
+  }, []);
 
   useEffect(() => {
     iniciarBanco();
     setPrefs(carregarPreferencias());
-  }, []);
+    checarServidor();
+  }, [checarServidor]);
+
+  // Botão "voltar" do Android: volta para o início em vez de fechar o app
+  useEffect(() => {
+    const assinatura = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (tela !== 'inicio') {
+        setTela('inicio');
+        return true;
+      }
+      return false;
+    });
+    return () => assinatura.remove();
+  }, [tela]);
 
   const tema = TEMAS[prefs.tema] || TEMAS.amareloNoPreto;
 
@@ -46,7 +64,11 @@ export default function App() {
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissao.granted) {
-      mostrarErro('Preciso da sua permissão para usar a câmera ou as fotos.');
+      mostrarErro(
+        origem === 'camera'
+          ? 'Preciso da sua permissão para usar a câmera. Você pode liberar nas configurações do celular.'
+          : 'Preciso da sua permissão para ver suas fotos. Você pode liberar nas configurações do celular.'
+      );
       return;
     }
 
@@ -56,16 +78,19 @@ export default function App() {
         ? await ImagePicker.launchCameraAsync(opcoes)
         : await ImagePicker.launchImageLibraryAsync(opcoes);
 
-    if (resultado.canceled) return;
+    if (resultado.canceled || !resultado.assets?.length) return;
 
     setCarregando(true);
+    falar('Lendo o papel. Aguarde.', prefs.velocidade);
     try {
-      const dados = await lerFoto(resultado.assets[0].uri);
+      const dados = await lerFoto(resultado.assets[0]);
       if (dados.texto) salvarLeitura(dados.texto);
+      setServidorOk(true);
       setLeitura(dados);
       setTela('resultado');
     } catch (e) {
       mostrarErro(e.message);
+      checarServidor();
     } finally {
       setCarregando(false);
     }
@@ -75,6 +100,7 @@ export default function App() {
     const nomes = Object.keys(TEMAS);
     const proximo = nomes[(nomes.indexOf(prefs.tema) + 1) % nomes.length];
     mudarPreferencia('tema', proximo);
+    AccessibilityInfo.announceForAccessibility(`Cores: ${TEMAS[proximo].nome}`);
   }
 
   let conteudo;
@@ -105,10 +131,15 @@ export default function App() {
         tema={tema}
         carregando={carregando}
         erro={erro}
+        servidorOk={servidorOk}
         aoTirarFoto={() => obterFoto('camera')}
         aoEscolherGaleria={() => obterFoto('galeria')}
-        aoAbrirHistorico={() => setTela('historico')}
+        aoAbrirHistorico={() => {
+          setErro(null);
+          setTela('historico');
+        }}
         aoTrocarTema={trocarTema}
+        aoTentarServidor={checarServidor}
       />
     );
   }

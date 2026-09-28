@@ -23,7 +23,11 @@ export default function BotaoGrande({ rotulo, dica, aoTocar, tema, secundario = 
         { backgroundColor: fundo, borderColor: tema.borda, opacity: desativado ? 0.5 : pressed ? 0.7 : 1 },
       ]}
     >
-      <Text style={[estilos.texto, { color: cor }]}>{rotulo}</Text>
+      {/* O rótulo já é grande: limitamos o quanto a fonte do sistema o aumenta
+          para não estourar o botão. O texto lido (tela de resultado) não tem limite. */}
+      <Text maxFontSizeMultiplier={1.4} style={[estilos.texto, { color: cor }]}>
+        {rotulo}
+      </Text>
     </Pressable>
   );
 }

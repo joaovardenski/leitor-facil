@@ -1,35 +1,67 @@
-import { useState, useCallback } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { View, Text, FlatList, Pressable, Alert, StyleSheet, AccessibilityInfo } from 'react-native';
 import BotaoGrande from '../components/BotaoGrande';
 import { TAMANHOS } from '../theme';
-import { listarLeituras } from '../db';
+import { listarLeituras, apagarLeitura } from '../db';
 
 function formatarData(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function HistoricoScreen({ tema, aoAbrirLeitura, aoVoltar }) {
-  const [leituras] = useState(() => listarLeituras());
+function resumir(texto) {
+  const primeiraLinha = texto.split('\n').find((l) => l.trim()) || '';
+  return primeiraLinha.length > 60 ? primeiraLinha.slice(0, 60) + '…' : primeiraLinha;
+}
 
-  const renderItem = useCallback(
-    ({ item }) => {
-      const resumo = item.texto.split('\n')[0].slice(0, 60);
-      return (
+export default function HistoricoScreen({ tema, aoAbrirLeitura, aoVoltar }) {
+  const [leituras, setLeituras] = useState(() => listarLeituras());
+
+  function confirmarApagar(item) {
+    Alert.alert('Apagar leitura?', resumir(item.texto), [
+      { text: 'Não', style: 'cancel' },
+      {
+        text: 'Sim, apagar',
+        style: 'destructive',
+        onPress: () => {
+          apagarLeitura(item.id);
+          setLeituras(listarLeituras());
+          AccessibilityInfo.announceForAccessibility('Leitura apagada');
+        },
+      },
+    ]);
+  }
+
+  function renderItem({ item }) {
+    const resumo = resumir(item.texto);
+    const data = formatarData(item.criado_em);
+    return (
+      <View style={[estilos.item, { borderColor: tema.borda }]}>
         <Pressable
           onPress={() => aoAbrirLeitura(item)}
           accessibilityRole="button"
-          accessibilityLabel={`${resumo}. Lido em ${formatarData(item.criado_em)}`}
-          accessibilityHint="Abre esta leitura"
-          style={[estilos.item, { borderColor: tema.borda }]}
+          accessibilityLabel={`${resumo}. Lido em ${data}`}
+          accessibilityHint="Abre esta leitura e lê em voz alta"
+          style={estilos.itemAbrir}
         >
-          <Text style={[estilos.itemTitulo, { color: tema.texto }]} numberOfLines={2}>{resumo}</Text>
-          <Text style={[estilos.itemData, { color: tema.texto }]}>{formatarData(item.criado_em)}</Text>
+          <Text style={[estilos.itemTitulo, { color: tema.texto }]} numberOfLines={2}>
+            {resumo}
+          </Text>
+          <Text style={[estilos.itemData, { color: tema.texto }]}>{data}</Text>
         </Pressable>
-      );
-    },
-    [tema, aoAbrirLeitura]
-  );
+        <Pressable
+          onPress={() => confirmarApagar(item)}
+          accessibilityRole="button"
+          accessibilityLabel={`Apagar leitura de ${data}`}
+          style={[estilos.botaoApagar, { borderColor: tema.borda }]}
+        >
+          <Text style={[estilos.textoApagar, { color: tema.texto }]} maxFontSizeMultiplier={1.3}>
+            Apagar
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={estilos.container}>
@@ -53,7 +85,18 @@ const estilos = StyleSheet.create({
   titulo: { fontSize: TAMANHOS.fonteTitulo, fontWeight: 'bold', marginBottom: TAMANHOS.espaco },
   lista: { flex: 1, marginBottom: TAMANHOS.espaco },
   vazio: { flex: 1, fontSize: 24, textAlign: 'center', marginTop: 40 },
-  item: { minHeight: TAMANHOS.alturaBotao, borderWidth: 3, borderRadius: 12, padding: 14, marginBottom: 12 },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    minHeight: TAMANHOS.alturaBotao,
+    borderWidth: 3,
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  itemAbrir: { flex: 1, padding: 14, justifyContent: 'center' },
   itemTitulo: { fontSize: 24, fontWeight: 'bold' },
   itemData: { fontSize: 20, marginTop: 4 },
+  botaoApagar: { width: 110, borderLeftWidth: 3, justifyContent: 'center', alignItems: 'center' },
+  textoApagar: { fontSize: 20, fontWeight: 'bold' },
 });
