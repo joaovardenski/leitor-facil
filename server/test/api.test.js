@@ -46,6 +46,12 @@ test('GET /saude responde ok', async () => {
   assert.deepEqual(await resposta.json(), { status: 'ok' });
 });
 
+test('GET / confirma que o servidor está no ar', async () => {
+  const resposta = await fetch(`${url}/`);
+  assert.equal(resposta.status, 200);
+  assert.equal((await resposta.json()).status, 'ok');
+});
+
 test('POST /ler reconhece o texto de uma bula', async () => {
   const foto = await gerarImagem(['PARACETAMOL 750 mg', 'Tomar 1 comprimido a cada 8 horas']);
   const { status, corpo } = await enviar(foto);

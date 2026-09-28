@@ -23,6 +23,11 @@ function criarApp() {
     },
   });
 
+  // Página raiz: confirma que o servidor está no ar para quem abrir no navegador
+  app.get('/', (req, res) => {
+    res.json({ status: 'ok', mensagem: 'Servidor do Leitor Fácil no ar.', rotas: ['GET /saude', 'POST /ler'] });
+  });
+
   app.get('/saude', (req, res) => {
     res.json({ status: 'ok' });
   });

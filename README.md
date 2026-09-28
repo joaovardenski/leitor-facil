@@ -82,7 +82,7 @@ curl http://localhost:3000/saude
 curl -F "foto=@caminho/da/foto.jpg" http://localhost:3000/ler
 ```
 
-Testes automáticos (11 testes, com o OCR de verdade: bula, acentos, foto deitada, foto escura, foto sem texto e erros):
+Testes automáticos (12 testes, com o OCR de verdade: bula, acentos, foto deitada, foto escura, foto sem texto e erros):
 
 ```bash
 npm test
