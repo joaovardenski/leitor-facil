@@ -171,5 +171,6 @@ O processo com os participantes fica registrado em [`docs/co-design.md`](docs/co
 
 ## Autores
 
+- Antônio Felipe Praiano
+- João Victor Vardenski de Andrade
 - Yuri Madureira Gouveia
-- _(demais integrantes do grupo)_
