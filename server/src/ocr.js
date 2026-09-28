@@ -7,6 +7,14 @@ const CONFIANCA_MINIMA = 45;
 
 let worker = null;
 
+/** Erro de quando o arquivo recebido não é uma imagem que dê para abrir. */
+class ImagemInvalidaError extends Error {
+  constructor() {
+    super('Não consegui abrir essa imagem. Tente tirar outra foto.');
+    this.name = 'ImagemInvalidaError';
+  }
+}
+
 /**
  * Carrega o Tesseract com o modelo de português.
  * O modelo vem do pacote npm @tesseract.js-data/por (instalado junto com o
@@ -28,14 +36,18 @@ async function iniciarOcr() {
  * - tira a cor e aumenta o contraste
  */
 async function tratarImagem(buffer) {
-  return sharp(buffer)
-    .rotate()
-    .resize({ width: 2000, withoutEnlargement: true })
-    .grayscale()
-    .normalize()
-    .sharpen()
-    .png()
-    .toBuffer();
+  try {
+    return await sharp(buffer)
+      .rotate()
+      .resize({ width: 2000, height: 2000, fit: 'inside', withoutEnlargement: true })
+      .grayscale()
+      .normalize()
+      .sharpen()
+      .png()
+      .toBuffer();
+  } catch {
+    throw new ImagemInvalidaError();
+  }
 }
 
 /**
@@ -61,11 +73,17 @@ async function lerImagem(buffer) {
   return { texto, confianca, aviso };
 }
 
-/** Remove espaços sobrando e linhas vazias repetidas. */
+/**
+ * Limpa o texto do OCR:
+ * - remove espaços sobrando
+ * - descarta linhas só com símbolos soltos (ex.: "| ~ ."), comuns em bordas e sombras da foto
+ * - junta linhas vazias repetidas
+ */
 function limparTexto(texto) {
   return (texto || '')
     .split('\n')
     .map((linha) => linha.replace(/\s+/g, ' ').trim())
+    .filter((linha) => linha === '' || /[\p{L}\p{N}]/u.test(linha))
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -75,4 +93,4 @@ async function encerrarOcr() {
   if (worker) await worker.terminate();
 }
 
-module.exports = { iniciarOcr, lerImagem, encerrarOcr };
+module.exports = { iniciarOcr, lerImagem, encerrarOcr, limparTexto, ImagemInvalidaError };
