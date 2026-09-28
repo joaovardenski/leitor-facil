@@ -35,7 +35,7 @@ Segue a estrutura sugerida na atividade. As falas são um ponto de partida: adap
   - funciona em qualquer celular comum, sem comprar lupa eletrônica ou leitor dedicado;
   - o modelo de português vem no próprio pacote, o servidor roda até num computador simples.
 - Privacidade: a foto não é salva em lugar nenhum; o histórico fica só no celular (LGPD).
-- Qualidade: mostrar o `npm test` passando (11 testes, incluindo foto deitada e foto escura).
+- Qualidade: mostrar o `npm test` passando (15 testes, incluindo foto deitada e foto escura).
 
 ## 2:30 – 4:00 · Demonstração prática
 

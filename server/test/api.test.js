@@ -64,6 +64,37 @@ test('POST /ler reconhece o texto de uma bula', async () => {
   assert.equal(corpo.aviso, null);
 });
 
+test('POST /ler aceita a foto em JSON base64 (formato do app)', async () => {
+  const foto = await gerarImagem(['PARACETAMOL 750 mg', 'Tomar 1 comprimido a cada 8 horas']);
+  const resposta = await fetch(`${url}/ler`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imagem: foto.toString('base64'), tipo: 'image/jpeg' }),
+  });
+  const corpo = await resposta.json();
+
+  assert.equal(resposta.status, 200);
+  assert.match(corpo.texto, /PARACETAMOL/);
+});
+
+test('POST /ler com JSON sem imagem devolve 400', async () => {
+  const resposta = await fetch(`${url}/ler`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outra: 'coisa' }),
+  });
+  assert.equal(resposta.status, 400);
+});
+
+test('POST /ler com JSON grande demais devolve 413', async () => {
+  const resposta = await fetch(`${url}/ler`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imagem: 'A'.repeat(16 * 1024 * 1024) }),
+  });
+  assert.equal(resposta.status, 413);
+});
+
 test('POST /ler reconhece acentos do português', async () => {
   const foto = await gerarImagem(['Atenção: não ultrapasse a dose', 'Conta de luz - vencimento']);
   const { status, corpo } = await enviar(foto);

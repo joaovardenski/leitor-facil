@@ -82,7 +82,7 @@ curl http://localhost:3000/saude
 curl -F "foto=@caminho/da/foto.jpg" http://localhost:3000/ler
 ```
 
-Testes automáticos (12 testes, com o OCR de verdade: bula, acentos, foto deitada, foto escura, foto sem texto e erros):
+Testes automáticos (15 testes, com o OCR de verdade: bula, foto em JSON, acentos, foto deitada, foto escura, foto sem texto e erros):
 
 ```bash
 npm test
@@ -152,7 +152,10 @@ leitor-facil/
 
 ### `POST /ler`
 
-Corpo `multipart/form-data` com o campo `foto` (imagem de até 10 MB).
+A imagem (até 10 MB) pode ir de dois jeitos:
+
+- **JSON** (é o que o app usa): `{ "imagem": "<foto em base64>", "tipo": "image/jpeg" }`
+- **multipart/form-data** com o campo `foto` (curl, Postman)
 
 Resposta:
 

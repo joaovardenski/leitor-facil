@@ -72,7 +72,8 @@ export default function App() {
       return;
     }
 
-    const opcoes = { mediaTypes: ['images'], quality: 0.8 };
+    // base64: a foto vai para o servidor como texto (ver src/api.js)
+    const opcoes = { mediaTypes: ['images'], quality: 0.7, base64: true };
     const resultado =
       origem === 'camera'
         ? await ImagePicker.launchCameraAsync(opcoes)

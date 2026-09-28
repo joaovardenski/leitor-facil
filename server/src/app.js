@@ -4,6 +4,8 @@ const multer = require('multer');
 const { lerImagem, ImagemInvalidaError } = require('./ocr');
 
 const TAMANHO_MAXIMO = 10 * 1024 * 1024; // 10 MB
+// Em base64 a imagem fica ~33% maior, então o JSON pode passar um pouco dos 10 MB
+const LIMITE_JSON = '15mb';
 
 /**
  * Monta a aplicação Express sem colocar no ar.
@@ -32,14 +34,27 @@ function criarApp() {
     res.json({ status: 'ok' });
   });
 
-  app.post('/ler', upload.single('foto'), async (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ erro: 'Envie a imagem no campo "foto".' });
+  // Aceita a foto de dois jeitos:
+  // - multipart/form-data, campo "foto" (curl, Postman, formulários)
+  // - JSON { "imagem": "<base64>" } (é o que o app usa: funciona em qualquer versão do Expo)
+  app.post('/ler', express.json({ limit: LIMITE_JSON }), upload.single('foto'), async (req, res) => {
+    let buffer = req.file?.buffer;
+
+    if (!buffer && typeof req.body?.imagem === 'string') {
+      const base64 = req.body.imagem.replace(/^data:[^;]+;base64,/, '');
+      buffer = Buffer.from(base64, 'base64');
+      if (buffer.length > TAMANHO_MAXIMO) {
+        return res.status(413).json({ erro: 'A imagem é maior que 10 MB.' });
+      }
+    }
+
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ erro: 'Envie a imagem no campo "foto" ou em JSON no campo "imagem" (base64).' });
     }
 
     const inicio = Date.now();
     try {
-      const resultado = await lerImagem(req.file.buffer);
+      const resultado = await lerImagem(buffer);
       console.log(`/ler: ${resultado.texto.length} caracteres, confiança ${resultado.confianca}%, ${Date.now() - inicio} ms`);
       res.json(resultado);
     } catch (erro) {
@@ -59,8 +74,14 @@ function criarApp() {
   // Erros de upload (arquivo grande demais, tipo inválido etc.)
   // eslint-disable-next-line no-unused-vars
   app.use((erro, req, res, next) => {
-    if (erro instanceof multer.MulterError && erro.code === 'LIMIT_FILE_SIZE') {
+    if (
+      (erro instanceof multer.MulterError && erro.code === 'LIMIT_FILE_SIZE') ||
+      erro.type === 'entity.too.large'
+    ) {
       return res.status(413).json({ erro: 'A imagem é maior que 10 MB.' });
+    }
+    if (erro.type === 'entity.parse.failed') {
+      return res.status(400).json({ erro: 'O JSON enviado está com defeito.' });
     }
     res.status(400).json({ erro: erro.message });
   });

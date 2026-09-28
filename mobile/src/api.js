@@ -25,20 +25,32 @@ export async function verificarServidor() {
 }
 
 /**
- * Envia a foto (asset do expo-image-picker) para o servidor e devolve
- * { texto, confianca, aviso }. Lança um erro com mensagem amigável se algo der errado.
+ * Envia a foto (asset do expo-image-picker, tirado com base64: true) para o
+ * servidor e devolve { texto, confianca, aviso }.
+ * Lança um erro com mensagem amigável se algo der errado.
+ *
+ * A foto vai em JSON, como texto base64. Enviar como arquivo (multipart com
+ * { uri, name, type }) não funciona no fetch das versões novas do Expo.
  */
 export async function lerFoto(foto) {
-  const tipo = foto.mimeType || 'image/jpeg';
-  const extensao = tipo.split('/')[1] || 'jpg';
-
-  const form = new FormData();
-  form.append('foto', { uri: foto.uri, name: foto.fileName || `foto.${extensao}`, type: tipo });
+  if (!foto.base64) {
+    throw new Error('Não consegui preparar a foto. Tente de novo.');
+  }
 
   let resposta;
   try {
-    resposta = await buscarComLimite(`${API_URL}/ler`, { method: 'POST', body: form }, TEMPO_LIMITE_LEITURA);
+    resposta = await buscarComLimite(
+      `${API_URL}/ler`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imagem: foto.base64, tipo: foto.mimeType || 'image/jpeg' }),
+      },
+      TEMPO_LIMITE_LEITURA
+    );
   } catch (erro) {
+    // Aparece no terminal do "npx expo start", ajuda a descobrir a causa
+    console.warn(`Falha ao enviar a foto para ${API_URL}/ler:`, erro?.message || erro);
     if (erro.name === 'AbortError') {
       throw new Error('A leitura demorou demais. Tente de novo.');
     }
