@@ -6,8 +6,9 @@
 //      digitado à mão. Ex.: bula-dipirona.jpg + bula-dipirona.txt
 //   3. Na pasta server, rode:  npm run medir
 //
-// Ele lê cada foto com todos os motores disponíveis (Tesseract sempre; Gemini
-// e Google Vision se a chave estiver no .env), compara com o texto correto e
+// Ele lê cada foto com todos os motores disponíveis (Tesseract sem e com o
+// corretor de palavras; Gemini e Google Vision se a chave estiver no .env),
+// compara com o texto correto e
 // mostra uma tabela. A tabela também é salva em amostras/resultado.md, pronta
 // para colar no relatório. O texto que cada motor leu fica em amostras/lidos/.
 
@@ -49,17 +50,24 @@ function encontrarAmostras() {
     });
 }
 
+// Nome na tabela → opções de leitura
+function opcoesDoMotor(motor) {
+  if (motor === 'tesseract-sem-dicionario') return { motor: 'tesseract', dicionario: false };
+  if (motor === 'tesseract') return { motor: 'tesseract', dicionario: true };
+  return { motor };
+}
+
 async function lerComMotor(buffer, motor) {
   const inicio = Date.now();
   try {
-    const resultado = await lerImagem(buffer, { motor });
+    const resultado = await lerImagem(buffer, opcoesDoMotor(motor));
     return { ...resultado, tempoMs: Date.now() - inicio };
   } catch (erro) {
     // 429 = limite por minuto do plano grátis: espera e tenta mais uma vez
     if (/\b429\b/.test(erro.message)) {
       console.warn(`  ${motor}: limite de pedidos atingido, esperando 60 s...`);
       await esperar(60000);
-      const resultado = await lerImagem(buffer, { motor });
+      const resultado = await lerImagem(buffer, opcoesDoMotor(motor));
       return { ...resultado, tempoMs: Date.now() - inicio };
     }
     throw erro;
@@ -74,7 +82,7 @@ async function main() {
     return;
   }
 
-  const motores = motoresDisponiveis();
+  const motores = ['tesseract-sem-dicionario', ...motoresDisponiveis()];
   console.log(`${amostras.length} amostra(s). Motores: ${motores.join(', ')}.\n`);
 
   await iniciarOcr();
@@ -91,7 +99,8 @@ async function main() {
       console.log(amostra.nome);
 
       for (const motor of motores) {
-        if (motor !== 'tesseract' && somas[motor].n + somas[motor].falhas > 0) await esperar(PAUSA_NUVEM_MS);
+        const naNuvem = !motor.startsWith('tesseract');
+        if (naNuvem && somas[motor].n + somas[motor].falhas > 0) await esperar(PAUSA_NUVEM_MS);
         try {
           const lido = await lerComMotor(buffer, motor);
           const acerto = compararTextos(lido.texto, correto);
@@ -103,11 +112,11 @@ async function main() {
           soma.tempo += lido.tempoMs;
           soma.n += 1;
           linhas.push([amostra.nome, motor, pct(acerto.acertoPalavras), pct(acerto.acertoCaracteres), `${lido.confianca}%`, segundos(lido.tempoMs)]);
-          console.log(`  ${motor.padEnd(14)} palavras ${pct(acerto.acertoPalavras).padStart(6)} · caracteres ${pct(acerto.acertoCaracteres).padStart(6)} · ${segundos(lido.tempoMs)}`);
+          console.log(`  ${motor.padEnd(25)} palavras ${pct(acerto.acertoPalavras).padStart(6)} · caracteres ${pct(acerto.acertoCaracteres).padStart(6)} · ${segundos(lido.tempoMs)}`);
         } catch (erro) {
           somas[motor].falhas += 1;
           linhas.push([amostra.nome, motor, 'falhou', '-', '-', '-']);
-          console.log(`  ${motor.padEnd(14)} FALHOU: ${erro.message}`);
+          console.log(`  ${motor.padEnd(25)} FALHOU: ${erro.message}`);
         }
       }
     }

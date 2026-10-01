@@ -3,6 +3,7 @@ const sharp = require('sharp');
 const { createWorker } = require('tesseract.js');
 const { lerComGemini, geminiConfigurado, modeloGemini } = require('./gemini');
 const { lerComVision, visionConfigurado } = require('./vision');
+const { carregarCorretor, corrigirTexto } = require('./corretor');
 
 // Motores de leitura na nuvem. O Tesseract (local) é sempre a reserva.
 const MOTORES_NUVEM = {
@@ -62,6 +63,7 @@ async function iniciarOcr() {
     '4.0.0_best_int'
   );
   worker = await createWorker('por', 1, { langPath, cacheMethod: 'none' });
+  if (carregarCorretor()) console.log('Corretor de palavras pronto.');
   console.log('OCR pronto.');
 }
 
@@ -133,13 +135,30 @@ function calcularConfianca(data) {
   return Math.round(soma / peso);
 }
 
-async function reconhecer(imagem) {
-  const { data } = await worker.recognize(imagem, {}, { text: true, blocks: true });
-  return { texto: limparTexto(data.text), confianca: calcularConfianca(data) };
+/** Lista das palavras lidas, na ordem: [{ text, confidence }]. */
+function palavrasLidas(data) {
+  const palavras = [];
+  for (const bloco of data.blocks || []) {
+    for (const paragrafo of bloco.paragraphs || []) {
+      for (const linha of paragrafo.lines || []) {
+        for (const palavra of linha.words || []) palavras.push({ text: palavra.text, confidence: palavra.confidence });
+      }
+    }
+  }
+  return palavras;
 }
 
-/** Leitura com o Tesseract, que roda aqui no próprio servidor (sem internet). */
-async function lerComTesseract(buffer) {
+async function reconhecer(imagem) {
+  const { data } = await worker.recognize(imagem, {}, { text: true, blocks: true });
+  return { textoBruto: data.text || '', palavras: palavrasLidas(data), confianca: calcularConfianca(data) };
+}
+
+/**
+ * Leitura com o Tesseract, que roda aqui no próprio servidor (sem internet).
+ * Depois passa o corretor de palavras (ver corretor.js), a não ser que
+ * dicionario = false (usado só para comparar no script de medição).
+ */
+async function lerComTesseract(buffer, { dicionario = true } = {}) {
   const imagem = await tratarImagem(buffer);
   let resultado = await reconhecer(imagem);
 
@@ -150,7 +169,15 @@ async function lerComTesseract(buffer) {
     const tentativa = await reconhecer(girada);
     if (tentativa.confianca > resultado.confianca) resultado = tentativa;
   }
-  return resultado;
+
+  let texto = resultado.textoBruto;
+  let correcoes = 0;
+  if (dicionario) {
+    const corrigido = corrigirTexto(texto, resultado.palavras);
+    texto = corrigido.texto;
+    correcoes = corrigido.correcoes.length;
+  }
+  return { texto: limparTexto(texto), confianca: resultado.confianca, correcoes };
 }
 
 /**
@@ -161,6 +188,7 @@ async function lerComTesseract(buffer) {
  * internet, limite do plano grátis, chave errada), cai no Tesseract.
  * opcoes.motor ('tesseract' | 'gemini' | 'google-vision') força um motor,
  * sem reserva; é usado pelo script que compara a taxa de acerto.
+ * opcoes.dicionario = false desliga o corretor de palavras do Tesseract.
  */
 async function lerImagem(buffer, opcoes = {}) {
   if (!worker) throw new Error('OCR ainda não foi iniciado.');
@@ -176,7 +204,7 @@ async function lerImagem(buffer, opcoes = {}) {
     const imagem = await prepararParaNuvem(buffer);
     try {
       const { textoBruto, confianca } = await motorNuvem.ler(imagem);
-      resultado = { texto: limparTexto(textoBruto), confianca };
+      resultado = { texto: limparTexto(textoBruto), confianca, correcoes: 0 };
       motor = nomeMotor;
     } catch (erro) {
       if (opcoes.motor) throw erro;
@@ -184,9 +212,9 @@ async function lerImagem(buffer, opcoes = {}) {
     }
   }
 
-  if (!resultado) resultado = await lerComTesseract(buffer);
+  if (!resultado) resultado = await lerComTesseract(buffer, { dicionario: opcoes.dicionario !== false });
 
-  const { texto, confianca } = resultado;
+  const { texto, confianca, correcoes } = resultado;
   let aviso = null;
   if (!texto) {
     aviso = 'Não encontrei texto na foto. Aproxime o celular do papel e use mais luz.';
@@ -194,7 +222,7 @@ async function lerImagem(buffer, opcoes = {}) {
     aviso = 'Parte do texto pode estar errada. Tente outra foto, mais de perto e com mais luz.';
   }
 
-  return { texto, confianca, aviso, motor };
+  return { texto, confianca, aviso, motor, correcoes };
 }
 
 /**

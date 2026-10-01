@@ -4,10 +4,11 @@
 // não precisa instalar nenhum pacote. A chave fica no arquivo server/.env
 // (GEMINI_API_KEY), que não vai para o GitHub.
 //
-// Cuidado: o Gemini é uma IA generativa. Numa foto ruim ele pode "completar"
-// uma palavra que não conseguiu ler. Por isso o pedido (PROMPT) é de
-// transcrição fiel, sem corrigir nem completar, e ele também diz o quanto
-// a foto estava legível, que vira a "confiança" usada no aviso do app.
+// Cuidado: o Gemini é uma IA generativa e completa o que não conseguiu ler.
+// Regra do projeto (igual à do corretor do Tesseract): ele PODE completar
+// palavras pelo contexto, mas NUNCA números, doses, unidades, valores, datas
+// ou nomes de remédio; esses viram [ilegível]. Ele também diz o quanto a foto
+// estava legível, o que vira a "confiança" usada no aviso do app.
 
 const MODELO_PADRAO = 'gemini-3.5-flash-lite';
 const URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -17,9 +18,10 @@ const PROMPT = `Você é um transcritor de documentos para pessoas com baixa vis
 Transcreva TODO o texto visível na imagem, exatamente como está escrito, em português.
 
 Regras:
-- Copie fielmente. Não corrija erros, não complete palavras, não resuma, não traduza, não explique.
-- Números, doses, valores, datas e unidades (mg, ml, R$) devem sair exatamente como aparecem.
-- Se uma palavra ou número não estiver legível, escreva [ilegível] no lugar. Nunca adivinhe.
+- Copie fielmente. Não resuma, não traduza, não explique e não acrescente nada que não esteja na imagem.
+- Se uma PALAVRA comum estiver parcialmente legível (borrada, cortada, sem acento), você pode completá-la pelo contexto da frase, desde que tenha segurança.
+- NUNCA complete nem adivinhe números, doses, unidades (mg, ml, g), valores (R$), datas, horários ou nomes de medicamentos e substâncias. Eles devem sair exatamente como aparecem; se não estiverem legíveis, escreva [ilegível].
+- Se uma palavra não der para ler nem pelo contexto, escreva [ilegível].
 - Mantenha a ordem de leitura e as quebras de linha principais. Ignore texto de páginas cortadas na borda da foto.
 - Se não houver texto, devolva texto vazio.
 

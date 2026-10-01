@@ -140,15 +140,18 @@ leitor-facil/
 │   │   ├── index.js          # sobe o servidor
 │   │   ├── app.js            # rotas da API (/ler e /saude) e tratamento de erros
 │   │   ├── ocr.js            # escolhe o motor, trata a imagem, Tesseract, confiança e aviso
+│   │   ├── corretor.js       # corrige palavras lidas errado pelo Tesseract (nunca números)
 │   │   ├── gemini.js         # leitura com o Gemini (nuvem)
 │   │   └── vision.js         # leitura com o Google Cloud Vision (alternativa)
 │   ├── scripts/
 │   │   ├── medir-acerto.js   # mede a taxa de acerto real (npm run medir)
 │   │   └── metricas.js       # cálculo do acerto de palavras e caracteres
 │   ├── amostras/             # fotos de teste + texto correto (só o exemplo vai para o Git)
+│   ├── dados/                # listas de palavras do corretor (fontes e licenças no LEIAME)
 │   ├── .env.example          # modelo para a chave do Gemini
 │   └── test/
 │       ├── api.test.js       # testes da API com o Tesseract (npm test)
+│       ├── corretor.test.js  # testes do corretor de palavras
 │       └── motores.test.js   # testes do Gemini e do Vision (resposta simulada)
 ├── mobile/
 │   ├── App.js                # controle das telas e do fluxo foto → leitura
@@ -201,6 +204,20 @@ No Tesseract e no Vision, a `confianca` é a média da confiança de cada palavr
 
 O Gemini não dá confiança por palavra. Ele avalia se a foto estava legível (`boa` = 95, `parcial` = 60, `ruim` = 25), e tudo que ele não consegue ler vem marcado como `[ilegível]`, o que já baixa a confiança para 40 e faz o aviso aparecer.
 
+`correcoes` diz quantas palavras o corretor mudou (só no Tesseract; ver abaixo).
+
+### Corretor de palavras (Tesseract)
+
+O Tesseract erra principalmente acentos ("Atencao", "nao", "farmacéutico") e letras parecidas ("c0mprimido", "rnédico"), muitas vezes com confiança alta. Depois da leitura, `src/corretor.js` procura, para cada palavra que **não existe em português**, a palavra real mais provável:
+
+- **Trocas típicas** de OCR (`0→o`, `1→l`, `rn→m`, `cl→d`...) e de acento, até duas por palavra.
+- **Letra a mais ou a menos** só quando o Tesseract leu a palavra com confiança baixa.
+- **Contexto:** pesa a frequência da palavra no português, se ela aparece em outra parte do mesmo texto e se é comum em bula e conta.
+- **Números, doses, unidades, valores e datas nunca são alterados.** "7S0" e "5OO" ficam como estão.
+- **Na dúvida, não mexe:** se dois candidatos ficam parecidos, a palavra fica como foi lida. Palavras que existem (inclusive raras, pelo dicionário VERO do LibreOffice) e nomes fora do dicionário, como nomes de remédio, também não são tocados.
+
+Num teste com a bula de exemplo lida pelo Tesseract com o modelo de **inglês** (que erra muito acento), o corretor levou o acerto de palavras de 88,2% para 95,6%. Com o modelo de português que o servidor usa, o ganho tende a ser menor; o `npm run medir` mostra o número real nas suas fotos. Num texto certo de 240 palavras (bula, conta e texto corrido), não fez nenhuma mudança indevida. O Gemini segue a mesma regra no pedido: pode completar **palavras** pelo contexto, mas nunca números, doses, datas ou nomes de remédio.
+
 Erros vêm como `{ "erro": "mensagem" }`: `400` (sem foto, arquivo que não é imagem ou imagem corrompida), `413` (maior que 10 MB) e `500` (falha no OCR).
 
 ### `GET /saude`
@@ -214,7 +231,7 @@ A "confiança" é o quanto o motor *acha* que acertou. Para saber o acerto real:
 1. Coloque fotos em `server/amostras/` e, para cada uma, um `.txt` de mesmo nome com o texto correto digitado à mão (já tem um `exemplo-bula` lá).
 2. Na pasta `server`, rode `npm run medir`.
 
-Cada foto é lida pelo Tesseract e pelo Gemini (se houver chave), e o script mostra o **acerto de palavras** e o **acerto de caracteres** de cada um. A tabela fica salva em `server/amostras/resultado.md`, pronta para o relatório. Detalhes em [`server/amostras/LEIAME.md`](server/amostras/LEIAME.md).
+Cada foto é lida pelo Tesseract sem o corretor, pelo Tesseract com o corretor e pelo Gemini (se houver chave), e o script mostra o **acerto de palavras** e o **acerto de caracteres** de cada um. A tabela fica salva em `server/amostras/resultado.md`, pronta para o relatório. Detalhes em [`server/amostras/LEIAME.md`](server/amostras/LEIAME.md).
 
 ## Como testar a acessibilidade
 
@@ -245,7 +262,8 @@ Antes de gravar o vídeo:
 ## Limitações conhecidas
 
 - O OCR erra com fotos tremidas, escuras ou papel amassado. O app avisa quando a confiança é baixa, mas **o texto lido não substitui a orientação de um farmacêutico ou médico**.
-- O Gemini é uma IA generativa: mesmo pedindo transcrição fiel e `[ilegível]` no que não der para ler, numa foto muito ruim ele pode "completar" uma palavra errada. Por isso o aviso continua e o Tesseract fica como alternativa sem IA.
+- O Gemini é uma IA generativa: ele pode completar palavras pelo contexto e, numa foto muito ruim, completar uma palavra errada. Números, doses e datas ele foi instruído a não completar, mas isso é uma instrução, não uma garantia. Por isso o aviso continua e o Tesseract fica como alternativa sem IA.
+- O corretor de palavras do Tesseract também pode, raramente, trocar uma palavra certa que não esteja nas listas por outra parecida. Ele nunca mexe em números.
 - O plano grátis do Gemini tem limite de pedidos por minuto e por dia. Quando estoura, o servidor usa o Tesseract automaticamente.
 - Precisa de conexão com o servidor: hoje, celular e computador na mesma rede Wi-Fi (ou o servidor publicado na internet).
 - Textos manuscritos (letra de médico) geralmente não são reconhecidos.

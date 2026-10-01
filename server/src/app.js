@@ -56,7 +56,9 @@ function criarApp() {
     try {
       const resultado = await lerImagem(buffer);
       console.log(
-        `/ler [${resultado.motor}]: ${resultado.texto.length} caracteres, confiança ${resultado.confianca}%, ${Date.now() - inicio} ms`
+        `/ler [${resultado.motor}]: ${resultado.texto.length} caracteres, confiança ${resultado.confianca}%` +
+          (resultado.correcoes ? `, ${resultado.correcoes} palavra(s) corrigida(s)` : '') +
+          `, ${Date.now() - inicio} ms`
       );
       res.json(resultado);
     } catch (erro) {
