@@ -146,8 +146,6 @@ leitor-facil/
 │           ├── ResultadoScreen.js
 │           └── HistoricoScreen.js
 └── docs/
-    ├── co-design.md          # registro das sessões com os usuários
-    ├── roteiro-video.md      # roteiro do vídeo de 5 minutos
     └── img/                  # imagens do README
 ```
 
@@ -180,13 +178,9 @@ Erros vêm como `{ "erro": "mensagem" }`: `400` (sem foto, arquivo que não é i
 
 Retorna `{ "status": "ok" }`. Útil para saber se o servidor está no ar.
 
-## Co-design
-
-O processo com os participantes fica registrado em [`docs/co-design.md`](docs/co-design.md).
-
 ## Como testar a acessibilidade
 
-Além dos testes com os participantes, antes de gravar o vídeo:
+Antes de gravar o vídeo:
 
 - [ ] **TalkBack** (Android: Configurações → Acessibilidade) ou **VoiceOver** (iPhone): todos os botões são anunciados com nome e dica? Dá para usar o app inteiro só deslizando e tocando duas vezes?
 - [ ] **Fonte do sistema no máximo**: o texto lido cresce junto? Algum botão ficou cortado?
@@ -195,10 +189,6 @@ Além dos testes com os participantes, antes de gravar o vídeo:
 - [ ] **Bula inteira**: a voz lê até o fim?
 - [ ] **Servidor desligado**: a tela inicial avisa e o "Tentar de novo" funciona quando ele volta?
 - [ ] **Botão voltar do Android** nas telas de resultado e histórico.
-
-## Roteiro do vídeo
-
-Sugestão de roteiro seguindo a estrutura da atividade (contexto → arquitetura → demonstração → próximos passos) em [`docs/roteiro-video.md`](docs/roteiro-video.md).
 
 ## Como trabalhar em grupo
 
@@ -210,11 +200,7 @@ Sugestão de roteiro seguindo a estrutura da atividade (contexto → arquitetura
 
 ### Checklist da entrega
 
-- [ ] Sessão 1 de co-design (entrevistas) registrada
-- [ ] Sessão 2 (protótipo) registrada
 - [ ] App testado no celular com o checklist de "Como testar a acessibilidade"
-- [ ] Sessão 3 (teste com o app) registrada, com a tabela "O que mudou"
-- [ ] Mudanças pedidas pelos participantes implementadas
 - [ ] Vídeo de até 5 min gravado (contexto → arquitetura → demonstração → próximos passos)
 - [ ] Link do vídeo adicionado aqui no README
 
