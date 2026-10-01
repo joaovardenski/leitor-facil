@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "medir": "node scripts/medir-acerto.js"
   },
   "engines": {
     "node": ">=18"

@@ -1,6 +1,42 @@
 const path = require('path');
 const sharp = require('sharp');
 const { createWorker } = require('tesseract.js');
+const { lerComGemini, geminiConfigurado, modeloGemini } = require('./gemini');
+const { lerComVision, visionConfigurado } = require('./vision');
+
+// Motores de leitura na nuvem. O Tesseract (local) é sempre a reserva.
+const MOTORES_NUVEM = {
+  gemini: { ler: lerComGemini, configurado: geminiConfigurado },
+  'google-vision': { ler: lerComVision, configurado: visionConfigurado },
+};
+
+/**
+ * Qual motor usar por padrão:
+ * - OCR_MOTOR no .env, se definido ('gemini', 'google-vision' ou 'tesseract')
+ * - senão, o primeiro que tiver chave: Gemini, depois Google Vision
+ * - sem nenhuma chave, Tesseract
+ */
+function motorPadrao() {
+  const escolhido = (process.env.OCR_MOTOR || '').trim();
+  if (escolhido) return escolhido;
+  for (const [nome, motor] of Object.entries(MOTORES_NUVEM)) {
+    if (motor.configurado()) return nome;
+  }
+  return 'tesseract';
+}
+
+/** Texto para o terminal dizendo como o servidor vai ler as fotos. */
+function descreverMotor() {
+  const motor = motorPadrao();
+  if (motor === 'gemini') return `Leitura: Gemini (${modeloGemini()}), com Tesseract de reserva.`;
+  if (motor === 'google-vision') return 'Leitura: Google Vision, com Tesseract de reserva.';
+  return 'Leitura: Tesseract. Para usar o Gemini, coloque GEMINI_API_KEY no server/.env.';
+}
+
+/** Motores que dá para usar agora (o script de medição compara todos). */
+function motoresDisponiveis() {
+  return ['tesseract', ...Object.keys(MOTORES_NUVEM).filter((nome) => MOTORES_NUVEM[nome].configurado())];
+}
 
 // Abaixo desse valor (0 a 100), avisamos o usuário que a leitura pode estar errada.
 const CONFIANCA_MINIMA = 45;
@@ -51,6 +87,22 @@ async function tratarImagem(buffer) {
 }
 
 /**
+ * Prepara a foto para os motores na nuvem: só corrige a rotação e limita o tamanho.
+ * Eles leem melhor a foto colorida original do que a versão tratada para o Tesseract.
+ */
+async function prepararParaNuvem(buffer) {
+  try {
+    return await sharp(buffer)
+      .rotate()
+      .resize({ width: 3000, height: 3000, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+  } catch {
+    throw new ImagemInvalidaError();
+  }
+}
+
+/**
  * Calcula a confiança da leitura (0 a 100) a partir das palavras reconhecidas.
  *
  * A média simples do Tesseract (data.confidence) conta igual qualquer "palavra",
@@ -86,13 +138,8 @@ async function reconhecer(imagem) {
   return { texto: limparTexto(data.text), confianca: calcularConfianca(data) };
 }
 
-/**
- * Recebe a imagem (Buffer) e devolve { texto, confianca, aviso }.
- * A imagem só existe em memória; nada é gravado em disco.
- */
-async function lerImagem(buffer) {
-  if (!worker) throw new Error('OCR ainda não foi iniciado.');
-
+/** Leitura com o Tesseract, que roda aqui no próprio servidor (sem internet). */
+async function lerComTesseract(buffer) {
   const imagem = await tratarImagem(buffer);
   let resultado = await reconhecer(imagem);
 
@@ -103,6 +150,41 @@ async function lerImagem(buffer) {
     const tentativa = await reconhecer(girada);
     if (tentativa.confianca > resultado.confianca) resultado = tentativa;
   }
+  return resultado;
+}
+
+/**
+ * Recebe a imagem (Buffer) e devolve { texto, confianca, aviso, motor }.
+ * A imagem só existe em memória; nada é gravado em disco (aqui no servidor).
+ *
+ * Usa o motor padrão (ver motorPadrao). Se o motor na nuvem falhar (sem
+ * internet, limite do plano grátis, chave errada), cai no Tesseract.
+ * opcoes.motor ('tesseract' | 'gemini' | 'google-vision') força um motor,
+ * sem reserva; é usado pelo script que compara a taxa de acerto.
+ */
+async function lerImagem(buffer, opcoes = {}) {
+  if (!worker) throw new Error('OCR ainda não foi iniciado.');
+
+  const nomeMotor = opcoes.motor || motorPadrao();
+  let resultado = null;
+  let motor = 'tesseract';
+
+  if (nomeMotor !== 'tesseract') {
+    const motorNuvem = MOTORES_NUVEM[nomeMotor];
+    if (!motorNuvem) throw new Error(`Motor de leitura desconhecido: "${nomeMotor}".`);
+    // Imagem corrompida dá ImagemInvalidaError aqui, antes de chamar a API
+    const imagem = await prepararParaNuvem(buffer);
+    try {
+      const { textoBruto, confianca } = await motorNuvem.ler(imagem);
+      resultado = { texto: limparTexto(textoBruto), confianca };
+      motor = nomeMotor;
+    } catch (erro) {
+      if (opcoes.motor) throw erro;
+      console.warn(`${nomeMotor} falhou, usando o Tesseract. Motivo: ${erro.message}`);
+    }
+  }
+
+  if (!resultado) resultado = await lerComTesseract(buffer);
 
   const { texto, confianca } = resultado;
   let aviso = null;
@@ -112,7 +194,7 @@ async function lerImagem(buffer) {
     aviso = 'Parte do texto pode estar errada. Tente outra foto, mais de perto e com mais luz.';
   }
 
-  return { texto, confianca, aviso };
+  return { texto, confianca, aviso, motor };
 }
 
 /**
@@ -135,4 +217,13 @@ async function encerrarOcr() {
   if (worker) await worker.terminate();
 }
 
-module.exports = { iniciarOcr, lerImagem, encerrarOcr, limparTexto, calcularConfianca, ImagemInvalidaError };
+module.exports = {
+  iniciarOcr,
+  lerImagem,
+  encerrarOcr,
+  limparTexto,
+  calcularConfianca,
+  descreverMotor,
+  motoresDisponiveis,
+  ImagemInvalidaError,
+};

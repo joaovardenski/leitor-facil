@@ -15,7 +15,7 @@ Muitos documentos importantes do dia a dia vêm impressos em letra pequena. Pess
 ## Funcionalidades
 
 - Fotografar o papel com a câmera ou escolher uma foto da galeria
-- Reconhecimento de texto (OCR) em português
+- Reconhecimento de texto em português com o Gemini (nuvem), e o Tesseract (local) como reserva automática
 - Texto em letra grande, com botões para aumentar e diminuir
 - Leitura em voz alta automática, com botões para parar e mudar a velocidade
 - Dois temas de alto contraste: amarelo no preto e preto no branco (ambos acima do nível AAA da WCAG)
@@ -45,17 +45,22 @@ Muitos documentos importantes do dia a dia vêm impressos em letra pequena. Pess
 ```mermaid
 flowchart LR
     A["📱 App (React Native / Expo)<br/>câmera e galeria<br/>texto grande + voz<br/>SQLite (histórico)"]
-    B["🖥️ Servidor (Node.js)<br/>Express + Multer<br/>Sharp (tratamento)<br/>Tesseract.js (OCR)"]
-    A -- "foto (multipart)" --> B
-    B -- "{ texto, confianca, aviso }" --> A
+    B["🖥️ Servidor (Node.js)<br/>Express + Multer<br/>Sharp (tratamento)<br/>Tesseract.js (OCR de reserva)"]
+    C["☁️ Gemini (opcional)<br/>leitura na nuvem"]
+    A -- "foto (JSON base64)" --> B
+    B -- "{ texto, confianca, aviso, motor }" --> A
+    B -. "foto" .-> C
+    C -. "texto" .-> B
 ```
 
 - **`mobile/`**: app React Native com Expo. Usa `expo-image-picker` (câmera), `expo-speech` (voz) e `expo-sqlite` (banco local).
-- **`server/`**: API Node que recebe a foto, melhora a imagem (corrige rotação, tira a cor, aumenta o contraste) e faz o OCR.
+- **`server/`**: API Node que recebe a foto e devolve o texto. Com a chave do Gemini configurada, ele lê a foto (mais preciso); sem a chave, ou se o Gemini falhar (sem internet, limite do plano grátis), o servidor usa o Tesseract, que roda no próprio computador. Para o Tesseract, a imagem é tratada antes (rotação, sem cor, mais contraste).
 
 **Privacidade:** a foto é processada só na memória do servidor e descartada em seguida; nada é gravado em disco. O histórico fica apenas no SQLite do celular. Isso reduz a exposição de dados pessoais (receitas, contas), em linha com a LGPD.
 
-**Baixo custo:** todas as bibliotecas são gratuitas e de código aberto, o OCR roda no próprio servidor (sem pagar API) e o app funciona em qualquer celular Android ou iPhone, sem hardware extra.
+Com o Gemini ligado, a foto sai do servidor e vai para o Google. No plano grátis, o Google informa que pode usar o conteúdo enviado para melhorar os produtos dele. Para uma versão real, com dados de pacientes, o certo seria o plano pago (que não usa os dados) ou só o Tesseract. Por isso o Tesseract continua no projeto e funciona sozinho.
+
+**Baixo custo:** todas as bibliotecas são gratuitas e de código aberto, o Gemini é usado no plano grátis (sem cartão), o Tesseract roda no próprio servidor sem pagar nada e o app funciona em qualquer celular Android ou iPhone, sem hardware extra.
 
 ## Como rodar
 
@@ -73,7 +78,18 @@ npm install
 npm start
 ```
 
-O modelo de português do OCR vem junto no `npm install` (pacote `@tesseract.js-data/por`), então o servidor não baixa nada ao iniciar. Quando aparecer `Servidor no ar na porta 3000.`, está pronto. Cada leitura aparece no terminal com o tamanho do texto, a confiança e o tempo.
+O modelo de português do Tesseract vem junto no `npm install` (pacote `@tesseract.js-data/por`), então o servidor não baixa nada ao iniciar. Quando aparecer `Servidor no ar na porta 3000.`, está pronto. A linha seguinte diz qual motor está lendo as fotos, e cada leitura aparece no terminal com o motor, o tamanho do texto, a confiança e o tempo.
+
+#### Leitura com o Gemini (opcional, recomendado)
+
+1. Entre em [aistudio.google.com/apikey](https://aistudio.google.com/apikey) com uma conta Google e clique em **Create API key**. É grátis e não pede cartão.
+2. Dentro de `server/`, copie `.env.example` para `.env` e cole a chave:
+   ```
+   GEMINI_API_KEY=sua-chave-aqui
+   ```
+3. Reinicie o servidor. Deve aparecer `Leitura: Gemini (gemini-3.5-flash-lite), com Tesseract de reserva.`
+
+O `.env` não vai para o GitHub: cada pessoa do grupo usa a própria chave. Nunca coloque a chave no app (`mobile/`), porque qualquer um conseguiria copiá-la. No mesmo `.env` dá para trocar o modelo (`GEMINI_MODELO`) ou usar o Google Cloud Vision (`GOOGLE_VISION_API_KEY`); veja os comentários do `.env.example`.
 
 Para testar sem o app:
 
@@ -82,7 +98,7 @@ curl http://localhost:3000/saude
 curl -F "foto=@caminho/da/foto.jpg" http://localhost:3000/ler
 ```
 
-Testes automáticos (15 testes, com o OCR de verdade: bula, foto em JSON, acentos, foto deitada, foto escura, foto sem texto e erros):
+Testes automáticos (com o Tesseract de verdade: bula, foto em JSON, acentos, foto deitada ou de cabeça para baixo, foto escura, foto sem texto, erros, e a reserva quando o Gemini falha; as respostas do Gemini e do Vision são simuladas, sem gastar a cota):
 
 ```bash
 npm test
@@ -123,9 +139,17 @@ leitor-facil/
 │   ├── src/
 │   │   ├── index.js          # sobe o servidor
 │   │   ├── app.js            # rotas da API (/ler e /saude) e tratamento de erros
-│   │   └── ocr.js            # tratamento da imagem + Tesseract
+│   │   ├── ocr.js            # escolhe o motor, trata a imagem, Tesseract, confiança e aviso
+│   │   ├── gemini.js         # leitura com o Gemini (nuvem)
+│   │   └── vision.js         # leitura com o Google Cloud Vision (alternativa)
+│   ├── scripts/
+│   │   ├── medir-acerto.js   # mede a taxa de acerto real (npm run medir)
+│   │   └── metricas.js       # cálculo do acerto de palavras e caracteres
+│   ├── amostras/             # fotos de teste + texto correto (só o exemplo vai para o Git)
+│   ├── .env.example          # modelo para a chave do Gemini
 │   └── test/
-│       └── api.test.js       # testes automáticos (npm test)
+│       ├── api.test.js       # testes da API com o Tesseract (npm test)
+│       └── motores.test.js   # testes do Gemini e do Vision (resposta simulada)
 ├── mobile/
 │   ├── App.js                # controle das telas e do fluxo foto → leitura
 │   ├── .env.example          # modelo para o endereço do servidor
@@ -164,19 +188,33 @@ Resposta:
 {
   "texto": "PARACETAMOL 750 mg\nTomar 1 comprimido a cada 8 horas",
   "confianca": 82,
-  "aviso": null
+  "aviso": null,
+  "motor": "gemini"
 }
 ```
 
+`motor` diz quem leu a foto: `gemini`, `google-vision` ou `tesseract` (quando não há chave ou o motor na nuvem falhou).
+
 `aviso` vem preenchido quando a confiança do OCR fica abaixo de 45% ou nenhum texto é encontrado.
 
-A `confianca` é a média da confiança de cada palavra, com peso pelo número de letras. Símbolos soltos que aparecem na borda da foto (mesa, página vizinha do livro) não puxam a nota para baixo. Se a leitura sair ruim, o servidor tenta de novo com a foto girada 180°, para o caso de o papel estar de cabeça para baixo.
+No Tesseract e no Vision, a `confianca` é a média da confiança de cada palavra, com peso pelo número de letras. Símbolos soltos que aparecem na borda da foto (mesa, página vizinha do livro) não puxam a nota para baixo. Se a leitura do Tesseract sair ruim, o servidor tenta de novo com a foto girada 180°, para o caso de o papel estar de cabeça para baixo.
+
+O Gemini não dá confiança por palavra. Ele avalia se a foto estava legível (`boa` = 95, `parcial` = 60, `ruim` = 25), e tudo que ele não consegue ler vem marcado como `[ilegível]`, o que já baixa a confiança para 40 e faz o aviso aparecer.
 
 Erros vêm como `{ "erro": "mensagem" }`: `400` (sem foto, arquivo que não é imagem ou imagem corrompida), `413` (maior que 10 MB) e `500` (falha no OCR).
 
 ### `GET /saude`
 
 Retorna `{ "status": "ok" }`. Útil para saber se o servidor está no ar.
+
+## Medir a taxa de acerto
+
+A "confiança" é o quanto o motor *acha* que acertou. Para saber o acerto real:
+
+1. Coloque fotos em `server/amostras/` e, para cada uma, um `.txt` de mesmo nome com o texto correto digitado à mão (já tem um `exemplo-bula` lá).
+2. Na pasta `server`, rode `npm run medir`.
+
+Cada foto é lida pelo Tesseract e pelo Gemini (se houver chave), e o script mostra o **acerto de palavras** e o **acerto de caracteres** de cada um. A tabela fica salva em `server/amostras/resultado.md`, pronta para o relatório. Detalhes em [`server/amostras/LEIAME.md`](server/amostras/LEIAME.md).
 
 ## Como testar a acessibilidade
 
@@ -207,6 +245,8 @@ Antes de gravar o vídeo:
 ## Limitações conhecidas
 
 - O OCR erra com fotos tremidas, escuras ou papel amassado. O app avisa quando a confiança é baixa, mas **o texto lido não substitui a orientação de um farmacêutico ou médico**.
+- O Gemini é uma IA generativa: mesmo pedindo transcrição fiel e `[ilegível]` no que não der para ler, numa foto muito ruim ele pode "completar" uma palavra errada. Por isso o aviso continua e o Tesseract fica como alternativa sem IA.
+- O plano grátis do Gemini tem limite de pedidos por minuto e por dia. Quando estoura, o servidor usa o Tesseract automaticamente.
 - Precisa de conexão com o servidor: hoje, celular e computador na mesma rede Wi-Fi (ou o servidor publicado na internet).
 - Textos manuscritos (letra de médico) geralmente não são reconhecidos.
 

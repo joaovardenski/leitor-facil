@@ -55,7 +55,9 @@ function criarApp() {
     const inicio = Date.now();
     try {
       const resultado = await lerImagem(buffer);
-      console.log(`/ler: ${resultado.texto.length} caracteres, confiança ${resultado.confianca}%, ${Date.now() - inicio} ms`);
+      console.log(
+        `/ler [${resultado.motor}]: ${resultado.texto.length} caracteres, confiança ${resultado.confianca}%, ${Date.now() - inicio} ms`
+      );
       res.json(resultado);
     } catch (erro) {
       if (erro instanceof ImagemInvalidaError) {

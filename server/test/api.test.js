@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const sharp = require('sharp');
 
 const { criarApp } = require('../src/app');
-const { iniciarOcr, encerrarOcr, limparTexto, calcularConfianca } = require('../src/ocr');
+const { iniciarOcr, encerrarOcr, limparTexto, calcularConfianca, lerImagem } = require('../src/ocr');
 
 let servidor;
 let url;
@@ -123,6 +123,25 @@ test('POST /ler desvira foto de cabeça para baixo', async () => {
   assert.equal(status, 200);
   assert.match(corpo.texto, /PARACETAMOL/);
   assert.equal(corpo.aviso, null);
+});
+
+test('se o Gemini falhar, a leitura cai no Tesseract', async () => {
+  const fetchOriginal = global.fetch;
+  process.env.GEMINI_API_KEY = 'chave-de-teste';
+  // Simula o Gemini recusando a chave; o resto (se houver) segue normal
+  global.fetch = async (url, opcoes) =>
+    String(url).includes('googleapis.com')
+      ? new Response(JSON.stringify({ error: { message: 'API key not valid' } }), { status: 400 })
+      : fetchOriginal(url, opcoes);
+  try {
+    const foto = await gerarImagem(['PARACETAMOL 750 mg', 'Tomar 1 comprimido a cada 8 horas']);
+    const resultado = await lerImagem(foto);
+    assert.equal(resultado.motor, 'tesseract');
+    assert.match(resultado.texto, /PARACETAMOL/);
+  } finally {
+    global.fetch = fetchOriginal;
+    delete process.env.GEMINI_API_KEY;
+  }
 });
 
 test('POST /ler lê foto escura e com pouco contraste', async () => {

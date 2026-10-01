@@ -27,3 +27,8 @@ Thumbs.db
 
 # Ambiente
 .env
+
+# Fotos de teste do OCR (podem ter dados pessoais): só o exemplo vai para o Git
+server/amostras/*
+!server/amostras/LEIAME.md
+!server/amostras/exemplo-*
