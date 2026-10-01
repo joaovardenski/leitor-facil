@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, AccessibilityInfo } from 'react-native';
 import BotaoGrande from '../components/BotaoGrande';
+import Ajuste from '../components/Ajuste';
 import { TAMANHOS } from '../theme';
 import { falar, pararFala, VELOCIDADE_MIN, VELOCIDADE_MAX } from '../fala';
 
@@ -40,10 +41,15 @@ export default function ResultadoScreen({ tema, leitura, prefs, aoMudarPreferenc
       return;
     }
     aoMudarPreferencia('tamanhoFonte', novo);
+    AccessibilityInfo.announceForAccessibility(`Letra ${novo}`);
   }
 
   function mudarVelocidade(delta) {
     const nova = Math.min(VELOCIDADE_MAX, Math.max(VELOCIDADE_MIN, +(velocidade + delta).toFixed(1)));
+    if (nova === velocidade) {
+      AccessibilityInfo.announceForAccessibility(delta > 0 ? 'A voz já está no máximo' : 'A voz já está no mínimo');
+      return;
+    }
     aoMudarPreferencia('velocidade', nova);
     // Se estava falando, recomeça na nova velocidade para a pessoa perceber a diferença
     if (falando) ouvir(nova);
@@ -52,51 +58,76 @@ export default function ResultadoScreen({ tema, leitura, prefs, aoMudarPreferenc
 
   return (
     <View style={estilos.container}>
+      <View style={estilos.topo}>
+        <BotaoGrande
+          tema={tema}
+          secundario
+          icone="voltar"
+          rotulo="Voltar"
+          dica="Volta para a tela inicial"
+          aoTocar={aoVoltar}
+          estilo={estilos.voltar}
+        />
+      </View>
+
       {aviso ? (
-        <Text accessibilityLiveRegion="assertive" style={[estilos.aviso, { color: tema.texto, borderColor: tema.borda }]}>
-          ⚠ {aviso}
-        </Text>
+        <View style={[estilos.aviso, { backgroundColor: tema.botaoFundo }]}>
+          <Text accessibilityLiveRegion="assertive" style={[estilos.textoAviso, { color: tema.botaoTexto }]}>
+            {aviso}
+          </Text>
+        </View>
       ) : null}
 
-      <ScrollView style={estilos.areaTexto} contentContainerStyle={estilos.conteudoTexto}>
-        <Text selectable style={{ color: tema.texto, fontSize: tamanhoFonte, lineHeight: tamanhoFonte * 1.4 }}>
-          {texto || 'Nenhum texto encontrado.'}
+      {/* O texto lido, numa "folha" com fundo levemente diferente da tela */}
+      <ScrollView
+        style={[estilos.folha, { backgroundColor: tema.superficie }]}
+        contentContainerStyle={estilos.conteudoFolha}
+      >
+        <Text selectable style={{ color: tema.texto, fontSize: tamanhoFonte, lineHeight: Math.round(tamanhoFonte * 1.45) }}>
+          {texto || 'Nenhum texto encontrado. Volte e tente outra foto, mais de perto.'}
         </Text>
       </ScrollView>
 
-      <Text style={[estilos.status, { color: tema.texto, borderTopColor: tema.borda }]} maxFontSizeMultiplier={1.3}>
-        Letra {tamanhoFonte} · Voz {formatarVelocidade(velocidade)}
-      </Text>
+      <View style={estilos.controles}>
+        {falando ? (
+          <BotaoGrande tema={tema} icone="parar" rotulo="Parar voz" dica="Para a leitura em voz alta" aoTocar={parar} />
+        ) : (
+          <BotaoGrande
+            tema={tema}
+            icone="som"
+            rotulo="Ouvir"
+            dica="Lê o texto em voz alta"
+            aoTocar={() => ouvir()}
+            desativado={!falaCompleta}
+          />
+        )}
 
-      <View style={estilos.linha}>
-        <View style={estilos.metade}>
-          {falando ? (
-            <BotaoGrande tema={tema} rotulo="Parar voz" dica="Para a leitura em voz alta" aoTocar={parar} />
-          ) : (
-            <BotaoGrande tema={tema} rotulo="Ouvir" dica="Lê o texto em voz alta" aoTocar={() => ouvir()} desativado={!falaCompleta} />
-          )}
-        </View>
-        <View style={estilos.metade}>
-          <BotaoGrande tema={tema} rotulo="Voltar" dica="Volta para a tela inicial" aoTocar={aoVoltar} />
-        </View>
-      </View>
+        <Ajuste
+          tema={tema}
+          rotulo="Letra"
+          valor={tamanhoFonte}
+          valorFalado={`tamanho ${tamanhoFonte}`}
+          menos={<Text maxFontSizeMultiplier={1} style={[estilos.aPequeno, { color: tema.botaoTexto }]}>A</Text>}
+          mais={<Text maxFontSizeMultiplier={1} style={[estilos.aGrande, { color: tema.botaoTexto }]}>A</Text>}
+          dicaMenos="Letra menor"
+          dicaMais="Letra maior"
+          aoDiminuir={() => mudarFonte(-PASSO_FONTE)}
+          aoAumentar={() => mudarFonte(PASSO_FONTE)}
+        />
 
-      <View style={estilos.linha}>
-        <View style={estilos.metade}>
-          <BotaoGrande tema={tema} secundario rotulo="Letra menor" dica="Diminui o tamanho do texto" aoTocar={() => mudarFonte(-PASSO_FONTE)} />
-        </View>
-        <View style={estilos.metade}>
-          <BotaoGrande tema={tema} secundario rotulo="Letra maior" dica="Aumenta o tamanho do texto" aoTocar={() => mudarFonte(PASSO_FONTE)} />
-        </View>
-      </View>
-
-      <View style={estilos.linha}>
-        <View style={estilos.metade}>
-          <BotaoGrande tema={tema} secundario rotulo="Voz devagar" dica="Diminui a velocidade da voz" aoTocar={() => mudarVelocidade(-PASSO_VELOCIDADE)} />
-        </View>
-        <View style={estilos.metade}>
-          <BotaoGrande tema={tema} secundario rotulo="Voz rápida" dica="Aumenta a velocidade da voz" aoTocar={() => mudarVelocidade(PASSO_VELOCIDADE)} />
-        </View>
+        <Ajuste
+          tema={tema}
+          rotulo="Voz"
+          rotuloFalado="Velocidade da voz"
+          valor={formatarVelocidade(velocidade)}
+          valorFalado={formatarVelocidade(velocidade)}
+          menos="−"
+          mais="+"
+          dicaMenos="Voz mais devagar"
+          dicaMais="Voz mais rápida"
+          aoDiminuir={() => mudarVelocidade(-PASSO_VELOCIDADE)}
+          aoAumentar={() => mudarVelocidade(PASSO_VELOCIDADE)}
+        />
       </View>
     </View>
   );
@@ -107,11 +138,14 @@ function formatarVelocidade(v) {
 }
 
 const estilos = StyleSheet.create({
-  container: { flex: 1, padding: TAMANHOS.espaco, paddingBottom: 0 },
-  aviso: { fontSize: 22, fontWeight: 'bold', borderWidth: 3, borderRadius: 12, padding: 12, marginBottom: 12 },
-  areaTexto: { flex: 1 },
-  conteudoTexto: { paddingBottom: TAMANHOS.espaco },
-  status: { fontSize: 18, textAlign: 'center', borderTopWidth: 2, paddingTop: 8, marginBottom: 8 },
-  linha: { flexDirection: 'row', gap: TAMANHOS.espaco },
-  metade: { flex: 1 },
+  container: { flex: 1, padding: TAMANHOS.espaco, gap: 12 },
+  topo: { flexDirection: 'row' },
+  voltar: { minHeight: 64, paddingHorizontal: 18 },
+  aviso: { borderRadius: TAMANHOS.raio, padding: 14 },
+  textoAviso: { fontSize: 20, fontWeight: 'bold', lineHeight: 27 },
+  folha: { flex: 1, borderRadius: TAMANHOS.raio },
+  conteudoFolha: { padding: 20 },
+  controles: { gap: 10 },
+  aPequeno: { fontSize: 22, fontWeight: 'bold' },
+  aGrande: { fontSize: 38, fontWeight: 'bold', lineHeight: 42 },
 });

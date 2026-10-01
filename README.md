@@ -137,7 +137,10 @@ leitor-facil/
 │       ├── texto.js          # divide textos longos para a voz
 │       ├── theme.js          # cores de alto contraste e tamanhos
 │       ├── components/
-│       │   └── BotaoGrande.js
+│       │   ├── BotaoGrande.js   # botão padrão (88 dp, com ícone opcional)
+│       │   ├── Ajuste.js        # seletor [−] valor [+] da letra e da voz
+│       │   ├── Carregando.js    # tela de espera enquanto lê a foto
+│       │   └── Icone.js         # ícones desenhados, sem biblioteca extra
 │       └── screens/
 │           ├── InicioScreen.js
 │           ├── ResultadoScreen.js
@@ -168,6 +171,8 @@ Resposta:
 ```
 
 `aviso` vem preenchido quando a confiança do OCR fica abaixo de 45% ou nenhum texto é encontrado.
+
+A `confianca` é a média da confiança de cada palavra, com peso pelo número de letras. Símbolos soltos que aparecem na borda da foto (mesa, página vizinha do livro) não puxam a nota para baixo. Se a leitura sair ruim, o servidor tenta de novo com a foto girada 180°, para o caso de o papel estar de cabeça para baixo.
 
 Erros vêm como `{ "erro": "mensagem" }`: `400` (sem foto, arquivo que não é imagem ou imagem corrompida), `413` (maior que 10 MB) e `500` (falha no OCR).
 

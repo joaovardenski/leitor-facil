@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const sharp = require('sharp');
 
 const { criarApp } = require('../src/app');
-const { iniciarOcr, encerrarOcr, limparTexto } = require('../src/ocr');
+const { iniciarOcr, encerrarOcr, limparTexto, calcularConfianca } = require('../src/ocr');
 
 let servidor;
 let url;
@@ -115,6 +115,16 @@ test('POST /ler corrige foto tirada com o celular deitado (EXIF)', async () => {
   assert.match(corpo.texto, /PARACETAMOL/);
 });
 
+test('POST /ler desvira foto de cabeça para baixo', async () => {
+  const reta = await gerarImagem(['PARACETAMOL 750 mg', 'Tomar 1 comprimido a cada 8 horas']);
+  const deCabecaParaBaixo = await sharp(reta).rotate(180).jpeg().toBuffer();
+  const { status, corpo } = await enviar(deCabecaParaBaixo);
+
+  assert.equal(status, 200);
+  assert.match(corpo.texto, /PARACETAMOL/);
+  assert.equal(corpo.aviso, null);
+});
+
 test('POST /ler lê foto escura e com pouco contraste', async () => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="260">
     <rect width="100%" height="100%" fill="#5a5a5a"/>
@@ -163,4 +173,22 @@ test('rota inexistente devolve 404', async () => {
 test('limparTexto remove espaços e linhas só com símbolos', () => {
   const sujo = '  PARACETAMOL   750 mg \n | ~ . \n\n\n\nTomar  1 comprimido\n—';
   assert.equal(limparTexto(sujo), 'PARACETAMOL 750 mg\n\nTomar 1 comprimido');
+});
+
+test('calcularConfianca ignora símbolos soltos e pesa palavras pelo tamanho', () => {
+  const palavra = (text, confidence) => ({ text, confidence });
+  const data = {
+    confidence: 40, // média simples, puxada para baixo pelo lixo
+    blocks: [{ paragraphs: [{ lines: [
+      { words: [palavra('Paracetamol', 95), palavra('comprimido', 92)] },
+      { words: [palavra('|', 5), palavra('~', 3), palavra('ia', 20)] },
+    ] }] }],
+  };
+  // (95*11 + 92*10 + 20*2) / 23 = 87
+  assert.equal(calcularConfianca(data), 87);
+});
+
+test('calcularConfianca usa a média do Tesseract quando não há palavras', () => {
+  assert.equal(calcularConfianca({ confidence: 61.6, blocks: null }), 62);
+  assert.equal(calcularConfianca({ confidence: 0, blocks: [] }), 0);
 });

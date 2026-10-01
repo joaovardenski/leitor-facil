@@ -148,7 +148,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={[estilos.app, { backgroundColor: tema.fundo }]}>
-        <StatusBar style={tema.fundo === '#000000' ? 'light' : 'dark'} />
+        <StatusBar style={tema.barraStatus} />
         {conteudo}
       </SafeAreaView>
     </SafeAreaProvider>

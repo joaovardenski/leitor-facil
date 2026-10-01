@@ -51,6 +51,42 @@ async function tratarImagem(buffer) {
 }
 
 /**
+ * Calcula a confiança da leitura (0 a 100) a partir das palavras reconhecidas.
+ *
+ * A média simples do Tesseract (data.confidence) conta igual qualquer "palavra",
+ * inclusive os pedacinhos sem sentido que surgem da borda da página, da mesa ou
+ * da página vizinha do livro ("ia", "|", "ae"). Numa foto de livro isso derruba
+ * a média e o app avisava "foto não nítida" mesmo com o texto lido certo.
+ *
+ * Aqui cada palavra pesa pelo número de letras/números: palavras de verdade
+ * (longas) mandam no resultado, e símbolos soltos são ignorados.
+ */
+function calcularConfianca(data) {
+  let soma = 0;
+  let peso = 0;
+  for (const bloco of data.blocks || []) {
+    for (const paragrafo of bloco.paragraphs || []) {
+      for (const linha of paragrafo.lines || []) {
+        for (const palavra of linha.words || []) {
+          const caracteres = (palavra.text.match(/[\p{L}\p{N}]/gu) || []).length;
+          if (caracteres < 2) continue;
+          soma += palavra.confidence * caracteres;
+          peso += caracteres;
+        }
+      }
+    }
+  }
+  // Sem detalhes por palavra: usa a média do próprio Tesseract
+  if (peso === 0) return Math.round(data.confidence || 0);
+  return Math.round(soma / peso);
+}
+
+async function reconhecer(imagem) {
+  const { data } = await worker.recognize(imagem, {}, { text: true, blocks: true });
+  return { texto: limparTexto(data.text), confianca: calcularConfianca(data) };
+}
+
+/**
  * Recebe a imagem (Buffer) e devolve { texto, confianca, aviso }.
  * A imagem só existe em memória; nada é gravado em disco.
  */
@@ -58,16 +94,22 @@ async function lerImagem(buffer) {
   if (!worker) throw new Error('OCR ainda não foi iniciado.');
 
   const imagem = await tratarImagem(buffer);
-  const { data } = await worker.recognize(imagem);
+  let resultado = await reconhecer(imagem);
 
-  const texto = limparTexto(data.text);
-  const confianca = Math.round(data.confidence);
+  // Leitura ruim pode ser só a foto de cabeça para baixo (papel virado na mesa,
+  // celular girado). O Tesseract não desvira sozinho, então tentamos girar 180°.
+  if (resultado.confianca < CONFIANCA_MINIMA) {
+    const girada = await sharp(imagem).rotate(180).toBuffer();
+    const tentativa = await reconhecer(girada);
+    if (tentativa.confianca > resultado.confianca) resultado = tentativa;
+  }
 
+  const { texto, confianca } = resultado;
   let aviso = null;
   if (!texto) {
-    aviso = 'Não encontrei texto na foto. Tente fotografar mais de perto, com boa luz.';
+    aviso = 'Não encontrei texto na foto. Aproxime o celular do papel e use mais luz.';
   } else if (confianca < CONFIANCA_MINIMA) {
-    aviso = 'A foto não ficou nítida e a leitura pode ter erros. Se puder, tire outra foto.';
+    aviso = 'Parte do texto pode estar errada. Tente outra foto, mais de perto e com mais luz.';
   }
 
   return { texto, confianca, aviso };
@@ -93,4 +135,4 @@ async function encerrarOcr() {
   if (worker) await worker.terminate();
 }
 
-module.exports = { iniciarOcr, lerImagem, encerrarOcr, limparTexto, ImagemInvalidaError };
+module.exports = { iniciarOcr, lerImagem, encerrarOcr, limparTexto, calcularConfianca, ImagemInvalidaError };

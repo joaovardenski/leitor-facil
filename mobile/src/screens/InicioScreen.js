@@ -1,5 +1,7 @@
-import { View, Text, ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import BotaoGrande from '../components/BotaoGrande';
+import Carregando from '../components/Carregando';
+import Icone from '../components/Icone';
 import { TAMANHOS } from '../theme';
 import { API_URL } from '../config';
 
@@ -14,32 +16,29 @@ export default function InicioScreen({
   aoTrocarTema,
   aoTentarServidor,
 }) {
-  if (carregando) {
-    return (
-      <View style={estilos.centro} accessibilityLiveRegion="polite">
-        <ActivityIndicator size="large" color={tema.texto} />
-        <Text style={[estilos.titulo, { color: tema.texto, marginTop: 24 }]}>Lendo o papel...</Text>
-        <Text style={[estilos.subtitulo, { color: tema.texto }]}>Isso pode levar alguns segundos.</Text>
-      </View>
-    );
-  }
+  const { width } = useWindowDimensions();
+
+  if (carregando) return <Carregando tema={tema} />;
+
+  // O botão de foto ocupa boa parte da largura da tela, até um limite
+  const disparador = Math.min(width * 0.58, 230);
 
   return (
     <ScrollView contentContainerStyle={estilos.container}>
       <Text accessibilityRole="header" style={[estilos.titulo, { color: tema.texto }]}>
         Leitor Fácil
       </Text>
-      <Text style={[estilos.subtitulo, { color: tema.texto }]}>
+      <Text style={[estilos.subtitulo, { color: tema.textoSuave }]}>
         Fotografe um papel para ver em letra grande e ouvir.
       </Text>
 
       {servidorOk === false ? (
-        <View style={[estilos.caixa, { borderColor: tema.borda }]} accessibilityLiveRegion="polite">
-          <Text style={[estilos.textoCaixa, { color: tema.texto }]}>
+        <View style={[estilos.alerta, { borderColor: tema.borda }]} accessibilityLiveRegion="polite">
+          <Text style={[estilos.textoAlerta, { color: tema.texto }]}>
             O serviço de leitura não está respondendo. Verifique a internet.
           </Text>
           {/* Ajuda a quem está configurando: mostra o endereço que o app está usando */}
-          <Text style={[estilos.endereco, { color: tema.texto }]} selectable>
+          <Text style={[estilos.endereco, { color: tema.textoSuave }]} selectable>
             Endereço: {API_URL}
           </Text>
           <BotaoGrande tema={tema} secundario rotulo="Tentar de novo" dica="Verifica a conexão outra vez" aoTocar={aoTentarServidor} />
@@ -47,31 +46,96 @@ export default function InicioScreen({
       ) : null}
 
       {erro ? (
-        <Text accessibilityLiveRegion="assertive" style={[estilos.caixa, estilos.textoCaixa, estilos.caixaErro, { color: tema.texto, borderColor: tema.borda }]}>
-          ⚠ {erro}
-        </Text>
+        <View style={[estilos.alerta, { borderColor: tema.borda }]}>
+          <Text accessibilityLiveRegion="assertive" style={[estilos.textoAlerta, { color: tema.texto, marginBottom: 0 }]}>
+            {erro}
+          </Text>
+        </View>
       ) : null}
 
-      <BotaoGrande tema={tema} rotulo="Tirar foto" dica="Abre a câmera para fotografar o papel" aoTocar={aoTirarFoto} />
-      <BotaoGrande tema={tema} rotulo="Escolher da galeria" dica="Abre suas fotos salvas" aoTocar={aoEscolherGaleria} />
-      <BotaoGrande tema={tema} secundario rotulo="Leituras anteriores" dica="Mostra os últimos papéis lidos" aoTocar={aoAbrirHistorico} />
-      <BotaoGrande tema={tema} secundario rotulo={`Cores: ${tema.nome}`} dica="Troca as cores da tela" aoTocar={aoTrocarTema} />
+      {/* A ação principal: um disparador de câmera gigante */}
+      <View style={estilos.areaDisparador}>
+        <Pressable
+          onPress={aoTirarFoto}
+          accessibilityRole="button"
+          accessibilityLabel="Tirar foto"
+          accessibilityHint="Abre a câmera para fotografar o papel"
+          style={({ pressed }) => [
+            estilos.anel,
+            {
+              width: disparador,
+              height: disparador,
+              borderRadius: disparador / 2,
+              borderColor: tema.borda,
+              transform: [{ scale: pressed ? 0.96 : 1 }],
+            },
+          ]}
+        >
+          {({ pressed }) => (
+            <View
+              style={[
+                estilos.miolo,
+                { borderRadius: disparador / 2, backgroundColor: tema.botaoFundo, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <Icone nome="camera" cor={tema.botaoTexto} tamanho={Math.round(disparador * 0.3)} />
+              <Text maxFontSizeMultiplier={1.3} style={[estilos.textoDisparador, { color: tema.botaoTexto }]}>
+                Tirar foto
+              </Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
 
-      <Text style={[estilos.dica, { color: tema.texto }]}>
-        Dica: deixe o papel reto, em um lugar bem iluminado, e segure o celular firme.
+      <View style={estilos.opcoes}>
+        <BotaoGrande
+          tema={tema}
+          secundario
+          linha
+          icone="galeria"
+          rotulo="Usar foto salva"
+          dica="Abre suas fotos salvas"
+          aoTocar={aoEscolherGaleria}
+        />
+        <BotaoGrande
+          tema={tema}
+          secundario
+          linha
+          icone="relogio"
+          rotulo="Leituras anteriores"
+          dica="Mostra os últimos papéis lidos"
+          aoTocar={aoAbrirHistorico}
+        />
+        <BotaoGrande
+          tema={tema}
+          secundario
+          linha
+          icone="contraste"
+          rotulo="Cores"
+          detalhe={tema.nome}
+          dica="Troca as cores da tela"
+          aoTocar={aoTrocarTema}
+        />
+      </View>
+
+      <Text style={[estilos.dica, { color: tema.textoSuave }]}>
+        Para ler melhor: papel reto, bastante luz e o texto ocupando a tela.
       </Text>
     </ScrollView>
   );
 }
 
 const estilos = StyleSheet.create({
-  container: { flexGrow: 1, padding: TAMANHOS.espaco * 1.5, justifyContent: 'center' },
-  centro: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: TAMANHOS.espaco },
-  titulo: { fontSize: TAMANHOS.fonteTitulo + 6, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
-  subtitulo: { fontSize: 22, textAlign: 'center', marginBottom: 32 },
-  caixa: { borderWidth: 3, borderRadius: 12, padding: 16, paddingBottom: 0, marginBottom: 24 },
-  textoCaixa: { fontSize: 22, fontWeight: 'bold', marginBottom: 16 },
-  caixaErro: { paddingBottom: 16, marginBottom: 24 },
-  dica: { fontSize: 20, textAlign: 'center', marginTop: 8 },
-  endereco: { fontSize: 16, marginTop: -8, marginBottom: 16 },
+  container: { flexGrow: 1, padding: TAMANHOS.espaco * 1.5, paddingTop: TAMANHOS.espaco * 1.5 },
+  titulo: { fontSize: TAMANHOS.fonteTitulo + 6, fontWeight: 'bold', marginBottom: 6 },
+  subtitulo: { fontSize: 21, lineHeight: 29, marginBottom: 20 },
+  alerta: { borderWidth: TAMANHOS.borda, borderRadius: TAMANHOS.raio, padding: 16, marginBottom: 16, gap: 12 },
+  textoAlerta: { fontSize: 22, fontWeight: 'bold', lineHeight: 30 },
+  endereco: { fontSize: 16 },
+  areaDisparador: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, flexGrow: 1 },
+  anel: { borderWidth: 5, padding: 8 },
+  miolo: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  textoDisparador: { fontSize: 30, fontWeight: 'bold' },
+  opcoes: { gap: 12, marginTop: 8 },
+  dica: { fontSize: 19, lineHeight: 27, marginTop: 16 },
 });
