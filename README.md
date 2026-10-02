@@ -14,7 +14,7 @@ Muitos documentos importantes do dia a dia vêm impressos em letra pequena. Pess
 
 ## Funcionalidades
 
-- Fotografar o papel com a câmera ou escolher uma foto da galeria
+- Fotografar o papel com a câmera do app, que tem uma **moldura** para enquadrar o texto (o que fica fora dela não é lido), ou escolher uma foto da galeria
 - Reconhecimento de texto em português com o Gemini (nuvem), e o Tesseract (local) como reserva automática
 - Texto em letra grande, com botões para aumentar e diminuir
 - Leitura em voz alta automática, com botões para parar e mudar a velocidade
@@ -170,7 +170,9 @@ leitor-facil/
 │       │   ├── Ajuste.js        # seletor [−] valor [+] da letra e da voz
 │       │   ├── Carregando.js    # tela de espera enquanto lê a foto
 │       │   └── Icone.js         # ícones desenhados, sem biblioteca extra
+│       ├── recorte.js           # posição da moldura na tela → recorte da foto
 │       └── screens/
+│           ├── CameraScreen.js  # câmera com moldura, instrução falada e lanterna
 │           ├── InicioScreen.js
 │           ├── ResultadoScreen.js
 │           └── HistoricoScreen.js
@@ -197,6 +199,8 @@ Resposta:
   "motor": "gemini"
 }
 ```
+
+Opcional: `"recorte": { "x", "y", "largura", "altura" }` em frações da foto (0 a 1). É a área da moldura da câmera do app; o servidor recorta a foto nela antes de ler. Recorte inválido é ignorado e a foto é lida inteira.
 
 `motor` diz quem leu a foto: `gemini`, `google-vision` ou `tesseract` (quando não há chave ou o motor na nuvem falhou).
 

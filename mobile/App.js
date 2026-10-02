@@ -7,12 +7,13 @@ import * as ImagePicker from 'expo-image-picker';
 import InicioScreen from './src/screens/InicioScreen';
 import ResultadoScreen from './src/screens/ResultadoScreen';
 import HistoricoScreen from './src/screens/HistoricoScreen';
+import CameraScreen from './src/screens/CameraScreen';
 import { TEMAS } from './src/theme';
 import { lerFoto, verificarServidor } from './src/api';
 import { falar } from './src/fala';
 import { iniciarBanco, carregarPreferencias, salvarPreferencia, salvarLeitura, PREFERENCIAS_PADRAO } from './src/db';
 
-// Controle simples de telas, sem biblioteca de navegação: 'inicio' | 'resultado' | 'historico'
+// Controle simples de telas, sem biblioteca de navegação: 'inicio' | 'camera' | 'resultado' | 'historico'
 export default function App() {
   const [tela, setTela] = useState('inicio');
   const [prefs, setPrefs] = useState(PREFERENCIAS_PADRAO);
@@ -55,36 +56,34 @@ export default function App() {
     falar(mensagem, prefs.velocidade); // aviso falado, não só escrito
   }
 
-  // Fluxo principal: foto → servidor (OCR) → tela de resultado
-  async function obterFoto(origem) {
+  // Fluxo principal: foto → servidor (OCR) → tela de resultado.
+  // "Tirar foto" abre a câmera do app, com a moldura (CameraScreen), que manda
+  // também o recorte da moldura; "Usar foto salva" vem da galeria, sem recorte.
+  function abrirCamera() {
     setErro(null);
-    const permissao =
-      origem === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    setTela('camera');
+  }
 
+  async function escolherDaGaleria() {
+    setErro(null);
+    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissao.granted) {
-      mostrarErro(
-        origem === 'camera'
-          ? 'Preciso da sua permissão para usar a câmera. Você pode liberar nas configurações do celular.'
-          : 'Preciso da sua permissão para ver suas fotos. Você pode liberar nas configurações do celular.'
-      );
+      mostrarErro('Preciso da sua permissão para ver suas fotos. Você pode liberar nas configurações do celular.');
       return;
     }
 
     // base64: a foto vai para o servidor como texto (ver src/api.js)
-    const opcoes = { mediaTypes: ['images'], quality: 0.7, base64: true };
-    const resultado =
-      origem === 'camera'
-        ? await ImagePicker.launchCameraAsync(opcoes)
-        : await ImagePicker.launchImageLibraryAsync(opcoes);
-
+    const resultado = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, base64: true });
     if (resultado.canceled || !resultado.assets?.length) return;
+    lerAFoto(resultado.assets[0], null);
+  }
 
+  async function lerAFoto(foto, recorte) {
+    setTela('inicio');
     setCarregando(true);
     falar('Lendo o papel. Aguarde.', prefs.velocidade);
     try {
-      const dados = await lerFoto(resultado.assets[0]);
+      const dados = await lerFoto(foto, recorte);
       if (dados.texto) salvarLeitura(dados.texto);
       setServidorOk(true);
       setLeitura(dados);
@@ -105,7 +104,9 @@ export default function App() {
   }
 
   let conteudo;
-  if (tela === 'resultado' && leitura) {
+  if (tela === 'camera') {
+    conteudo = <CameraScreen tema={tema} prefs={prefs} aoFotografar={lerAFoto} aoVoltar={() => setTela('inicio')} />;
+  } else if (tela === 'resultado' && leitura) {
     conteudo = (
       <ResultadoScreen
         tema={tema}
@@ -133,8 +134,8 @@ export default function App() {
         carregando={carregando}
         erro={erro}
         servidorOk={servidorOk}
-        aoTirarFoto={() => obterFoto('camera')}
-        aoEscolherGaleria={() => obterFoto('galeria')}
+        aoTirarFoto={abrirCamera}
+        aoEscolherGaleria={escolherDaGaleria}
         aoAbrirHistorico={() => {
           setErro(null);
           setTela('historico');

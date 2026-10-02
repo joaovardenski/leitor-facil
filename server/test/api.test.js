@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const sharp = require('sharp');
 
 const { criarApp } = require('../src/app');
-const { iniciarOcr, encerrarOcr, limparTexto, calcularConfianca, lerImagem } = require('../src/ocr');
+const { iniciarOcr, encerrarOcr, limparTexto, calcularConfianca, lerImagem, normalizarRecorte } = require('../src/ocr');
 
 let servidor;
 let url;
@@ -113,6 +113,50 @@ test('POST /ler corrige foto tirada com o celular deitado (EXIF)', async () => {
 
   assert.equal(status, 200);
   assert.match(corpo.texto, /PARACETAMOL/);
+});
+
+test('POST /ler com recorte (moldura do app) lê só a área da moldura', async () => {
+  // Imagem de 280 px de altura: linha 1 ocupa ~48–90 px, linha 2 ~128–170 px.
+  // A moldura começa em 36% (~100 px): pega só a linha de baixo, com folga.
+  const foto = await gerarImagem(['PARACETAMOL 750 mg', 'DIPIRONA 500 mg']);
+  const resposta = await fetch(`${url}/ler`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      imagem: foto.toString('base64'),
+      tipo: 'image/jpeg',
+      recorte: { x: 0, y: 0.36, largura: 1, altura: 0.64 },
+    }),
+  });
+  const corpo = await resposta.json();
+
+  assert.equal(resposta.status, 200);
+  assert.match(corpo.texto, /DIPIRONA/);
+  assert.doesNotMatch(corpo.texto, /PARACETAMOL/);
+});
+
+test('recorte inválido é ignorado e a foto é lida inteira', async () => {
+  const foto = await gerarImagem(['PARACETAMOL 750 mg', 'DIPIRONA 500 mg']);
+  const resposta = await fetch(`${url}/ler`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imagem: foto.toString('base64'), recorte: { x: 'abc', y: 0 } }),
+  });
+  const corpo = await resposta.json();
+  assert.equal(resposta.status, 200);
+  assert.match(corpo.texto, /PARACETAMOL/);
+  assert.match(corpo.texto, /DIPIRONA/);
+});
+
+test('normalizarRecorte confere e ajusta o recorte', () => {
+  assert.deepEqual(normalizarRecorte({ x: 0.1, y: 0.2, largura: 0.5, altura: 0.5 }), { x: 0.1, y: 0.2, largura: 0.5, altura: 0.5 });
+  // passa da borda: ajusta para caber
+  assert.deepEqual(normalizarRecorte({ x: 0.8, y: -0.1, largura: 0.5, altura: 2 }), { x: 0.8, y: 0, largura: 0.19999999999999996, altura: 1 });
+  // via multipart chega como texto
+  assert.deepEqual(normalizarRecorte('{"x":0,"y":0,"largura":1,"altura":1}'), { x: 0, y: 0, largura: 1, altura: 1 });
+  for (const invalido of [null, undefined, 'abc', {}, { x: 0, y: 0, largura: 0, altura: 1 }, { x: 'a', y: 0, largura: 1, altura: 1 }]) {
+    assert.equal(normalizarRecorte(invalido), null);
+  }
 });
 
 test('POST /ler desvira foto de cabeça para baixo', async () => {

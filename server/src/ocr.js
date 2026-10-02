@@ -90,6 +90,56 @@ async function tratarImagem(buffer) {
 }
 
 /**
+ * Confere o recorte vindo do app ({ x, y, largura, altura } em frações de 0 a 1,
+ * a área da moldura da câmera). Devolve o recorte ajustado para caber na foto,
+ * ou null se vier faltando ou inválido (aí a foto é lida inteira).
+ */
+function normalizarRecorte(recorte) {
+  let r = recorte;
+  if (typeof r === 'string') {
+    try {
+      r = JSON.parse(r); // via multipart o campo chega como texto
+    } catch {
+      return null;
+    }
+  }
+  if (!r || typeof r !== 'object') return null;
+  const valores = [r.x, r.y, r.largura, r.altura].map(Number);
+  if (!valores.every(Number.isFinite)) return null;
+  let [x, y, largura, altura] = valores;
+  x = Math.min(Math.max(x, 0), 1);
+  y = Math.min(Math.max(y, 0), 1);
+  largura = Math.min(largura, 1 - x);
+  altura = Math.min(altura, 1 - y);
+  if (largura <= 0 || altura <= 0) return null;
+  return { x, y, largura, altura };
+}
+
+// Recortes menores que isso (em pixels) são ignorados: provavelmente algo deu errado
+const RECORTE_MINIMO_PX = 80;
+
+/** Recorta a foto na área da moldura. A orientação (EXIF) é corrigida antes. */
+async function recortarImagem(buffer, recorte) {
+  const area = normalizarRecorte(recorte);
+  if (!area) return buffer;
+  let orientada;
+  let largura;
+  let altura;
+  try {
+    orientada = await sharp(buffer).rotate().toBuffer();
+    ({ width: largura, height: altura } = await sharp(orientada).metadata());
+  } catch {
+    throw new ImagemInvalidaError();
+  }
+  const left = Math.round(area.x * largura);
+  const top = Math.round(area.y * altura);
+  const width = Math.min(largura - left, Math.round(area.largura * largura));
+  const height = Math.min(altura - top, Math.round(area.altura * altura));
+  if (width < RECORTE_MINIMO_PX || height < RECORTE_MINIMO_PX) return orientada;
+  return sharp(orientada).extract({ left, top, width, height }).jpeg({ quality: 92 }).toBuffer();
+}
+
+/**
  * Prepara a foto para os motores na nuvem: só corrige a rotação e limita o tamanho.
  * Eles leem melhor a foto colorida original do que a versão tratada para o Tesseract.
  */
@@ -190,9 +240,13 @@ async function lerComTesseract(buffer, { dicionario = true } = {}) {
  * opcoes.motor ('tesseract' | 'gemini' | 'google-vision') força um motor,
  * sem reserva; é usado pelo script que compara a taxa de acerto.
  * opcoes.dicionario = false desliga o corretor de palavras do Tesseract.
+ * opcoes.recorte: área da moldura da câmera do app; a foto é recortada antes de ler.
  */
-async function lerImagem(buffer, opcoes = {}) {
+async function lerImagem(fotoRecebida, opcoes = {}) {
   if (!worker) throw new Error('OCR ainda não foi iniciado.');
+
+  // Com a moldura, só o que está dentro dela é lido: fundo e página vizinha ficam de fora
+  const buffer = opcoes.recorte ? await recortarImagem(fotoRecebida, opcoes.recorte) : fotoRecebida;
 
   const nomeMotor = opcoes.motor || motorPadrao();
   let resultado = null;
@@ -252,6 +306,7 @@ module.exports = {
   encerrarOcr,
   limparTexto,
   calcularConfianca,
+  normalizarRecorte,
   descreverMotor,
   motoresDisponiveis,
   ImagemInvalidaError,

@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
-const { lerImagem, ImagemInvalidaError } = require('./ocr');
+const { lerImagem, normalizarRecorte, ImagemInvalidaError } = require('./ocr');
 
 const TAMANHO_MAXIMO = 10 * 1024 * 1024; // 10 MB
 // Em base64 a imagem fica ~33% maior, então o JSON pode passar um pouco dos 10 MB
@@ -37,6 +37,7 @@ function criarApp() {
   // Aceita a foto de dois jeitos:
   // - multipart/form-data, campo "foto" (curl, Postman, formulários)
   // - JSON { "imagem": "<base64>" } (é o que o app usa: funciona em qualquer versão do Expo)
+  // Opcional nos dois: "recorte" { x, y, largura, altura } em frações (moldura da câmera do app)
   app.post('/ler', express.json({ limit: LIMITE_JSON }), upload.single('foto'), async (req, res) => {
     let buffer = req.file?.buffer;
 
@@ -54,9 +55,10 @@ function criarApp() {
 
     const inicio = Date.now();
     try {
-      const resultado = await lerImagem(buffer);
+      const recorte = normalizarRecorte(req.body?.recorte);
+      const resultado = await lerImagem(buffer, recorte ? { recorte } : {});
       console.log(
-        `/ler [${resultado.motor}]: ${resultado.texto.length} caracteres, confiança ${resultado.confianca}%` +
+        `/ler [${resultado.motor}]${recorte ? ' (com moldura)' : ''}: ${resultado.texto.length} caracteres, confiança ${resultado.confianca}%` +
           (resultado.correcoes ? `, ${resultado.correcoes} palavra(s) corrigida(s)` : '') +
           `, ${Date.now() - inicio} ms`
       );

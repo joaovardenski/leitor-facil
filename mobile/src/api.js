@@ -25,14 +25,16 @@ export async function verificarServidor() {
 }
 
 /**
- * Envia a foto (asset do expo-image-picker, tirado com base64: true) para o
+ * Envia a foto (tirada com base64: true, pela câmera do app ou da galeria) para o
  * servidor e devolve { texto, confianca, aviso }.
+ * recorte (opcional): { x, y, largura, altura } em frações da foto, a área da
+ * moldura da câmera; o servidor recorta a foto nela antes de ler.
  * Lança um erro com mensagem amigável se algo der errado.
  *
  * A foto vai em JSON, como texto base64. Enviar como arquivo (multipart com
  * { uri, name, type }) não funciona no fetch das versões novas do Expo.
  */
-export async function lerFoto(foto) {
+export async function lerFoto(foto, recorte = null) {
   if (!foto.base64) {
     throw new Error('Não consegui preparar a foto. Tente de novo.');
   }
@@ -44,7 +46,7 @@ export async function lerFoto(foto) {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imagem: foto.base64, tipo: foto.mimeType || 'image/jpeg' }),
+        body: JSON.stringify({ imagem: foto.base64, tipo: foto.mimeType || 'image/jpeg', ...(recorte ? { recorte } : {}) }),
       },
       TEMPO_LIMITE_LEITURA
     );
