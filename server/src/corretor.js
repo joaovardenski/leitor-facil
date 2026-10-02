@@ -18,7 +18,8 @@
 //   - na dúvida (dois candidatos parecidos), deixa como está
 //
 // Dados em server/dados (ver LEIAME.md lá): lista de frequência do português
-// do Brasil e lista de palavras do dicionário Hunspell (LibreOffice).
+// do Brasil, lista de palavras do dicionário Hunspell (LibreOffice) e
+// termos-protegidos.txt (nomes de remédio, latim de bula), que nunca são trocados.
 
 const fs = require('fs');
 const path = require('path');
@@ -98,6 +99,17 @@ function lerListaCompactada(arquivo) {
   return zlib.gunzipSync(fs.readFileSync(path.join(PASTA_DADOS, arquivo))).toString('utf8');
 }
 
+function lerTermosProtegidos() {
+  const arquivo = path.join(PASTA_DADOS, 'termos-protegidos.txt');
+  if (!fs.existsSync(arquivo)) return [];
+  return fs
+    .readFileSync(arquivo, 'utf8')
+    .split('\n')
+    .filter((linha) => !linha.trim().startsWith('#'))
+    .flatMap((linha) => linha.trim().toLowerCase().split(/\s+/))
+    .filter(Boolean);
+}
+
 /** Carrega as listas de palavras (uma vez, ao iniciar o servidor). */
 function carregarCorretor() {
   if (frequencia) return true;
@@ -114,6 +126,13 @@ function carregarCorretor() {
     for (const linha of lerListaCompactada('dicionario.txt.gz').split('\n')) {
       const palavra = linha.trim().toLowerCase();
       if (palavra) dicionario.add(palavra);
+    }
+    // Termos protegidos contam como palavras que existem: nunca são trocados
+    // e podem servir de correção ("Glnkgo" → "Ginkgo")
+    for (const palavra of lerTermosProtegidos()) {
+      dicionario.add(palavra);
+      // Frequência média, para poderem ser escolhidos como correção
+      if (!freq.has(palavra)) freq.set(palavra, 1000);
     }
     frequencia = freq;
     validas = dicionario;

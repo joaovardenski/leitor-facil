@@ -66,3 +66,17 @@ test('corrige dentro do texto mantendo pontuação e quebras de linha', () => {
     ['Atenção', 'não', 'farmacêutico']
   );
 });
+
+test('nomes de remédio e latim de bula nunca são trocados', () => {
+  const nomes = ['Ginkgo', 'biloba', 'Passiflora', 'incarnata', 'Senna', 'alexandrina', 'Lactobacillus', 'boulardii',
+    'dipirona', 'amoxicilina', 'Losartana', 'croscarmelose', 'monoidratada'];
+  for (const nome of nomes) {
+    assert.equal(corrigir(nome, 95), null, nome);
+    assert.equal(corrigir(nome, 40), null, nome);
+  }
+});
+
+test('termos protegidos servem para consertar leitura errada do nome', () => {
+  assert.equal(corrigir('Glnkgo', 60), 'Ginkgo');
+  assert.equal(corrigir('arnoxicilina', 60), 'amoxicilina');
+});

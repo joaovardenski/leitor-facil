@@ -1,0 +1,47 @@
+# Termos protegidos do corretor de palavras (src/corretor.js)
+#
+# Palavras desta lista NUNCA são trocadas pelo corretor, e ele pode usá-las
+# para consertar uma leitura com uma letra errada (ex.: "Glnkgo" → "Ginkgo").
+# Use para nomes de remédio, princípios ativos, nomes científicos em latim e
+# excipientes que aparecem em bula. Uma palavra por linha (ou várias separadas
+# por espaço); maiúsculas e minúsculas tanto faz. Linhas com # são comentários.
+#
+# Reinicie o servidor depois de editar.
+
+# Plantas medicinais e fitoterápicos (nomes científicos)
+ginkgo biloba passiflora incarnata hedera helix peumus boldus valeriana officinalis
+matricaria chamomilla recutita hypericum perforatum aesculus hippocastanum panax ginseng
+cynara scolymus maytenus ilicifolia mikania glomerata echinacea purpurea angustifolia
+melissa erythrina mulungu senna alexandrina cassia plantago ovata psyllium
+harpagophytum procumbens uncaria tomentosa piper methysticum glycine max cimicifuga racemosa
+vitex agnus castus silybum marianum zingiber officinale curcuma longa allium sativum
+camellia sinensis paullinia cupana mentha piperita foeniculum vulgare pimpinella anisum
+aloe vera calendula arnica montana symphytum crataegus oxyacantha
+
+# Probióticos e microrganismos
+lactobacillus acidophilus rhamnosus casei reuteri plantarum bifidobacterium lactis longum
+saccharomyces boulardii cerevisiae streptococcus thermophilus staphylococcus aureus
+escherichia coli candida albicans helicobacter pylori bacillus clausii
+
+# Princípios ativos comuns (DCB)
+dipirona losartana atorvastatina sinvastatina rosuvastatina metformina glibenclamida gliclazida
+enalapril captopril anlodipino hidroclorotiazida clortalidona furosemida espironolactona
+propranolol atenolol carvedilol metoprolol omeprazol pantoprazol esomeprazol ranitidina
+domperidona ondansetrona bromoprida dimenidrinato metoclopramida loratadina desloratadina
+cetirizina fexofenadina prometazina prednisolona prednisona dexametasona betametasona
+hidrocortisona amoxicilina azitromicina claritromicina cefalexina ciprofloxacino levofloxacino
+nitrofurantoína sulfametoxazol trimetoprima fluconazol nistatina cetoconazol miconazol
+ivermectina albendazol mebendazol nitazoxanida nimesulida ibuprofeno cetoprofeno diclofenaco
+naproxeno paracetamol tramadol codeína clonazepam diazepam alprazolam bromazepam zolpidem
+sertralina fluoxetina escitalopram citalopram paroxetina venlafaxina amitriptilina
+nortriptilina quetiapina risperidona haloperidol levotiroxina varfarina clopidogrel
+salbutamol fenoterol budesonida beclometasona montelucaste insulina glargina sitagliptina
+dapagliflozina empagliflozina alendronato colecalciferol escopolamina butilbrometo
+simeticona loperamida bisacodil lactulose
+
+# Sais, formas e excipientes
+acetilsalicílico clavulanato potássico potássica sódico sódica monoidratada cloridrato
+maleato besilato succinato hemifumarato fumarato mesilato tartarato estearato magnésio
+croscarmelose povidona crospovidona celulose microcristalina lactose amido glicolato
+dióxido silício talco hipromelose macrogol polissorbato sacarose sorbitol metilparabeno
+propilparabeno
