@@ -13,7 +13,7 @@
 // Modelos tentados em ordem. No plano grátis, um modelo às vezes fica
 // sobrecarregado (erro 503) ou atinge o limite (429); aí tentamos o próximo.
 // Dá para trocar no .env: GEMINI_MODELO=modelo1,modelo2
-const MODELOS_PADRAO = ['gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'];
+const MODELOS_PADRAO = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest'];
 const URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // Erros em que vale tentar outro modelo: não encontrado, limite, sobrecarga

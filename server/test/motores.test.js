@@ -24,8 +24,8 @@ test('Gemini: envia a foto e a chave do jeito que a API espera', async () => {
 
   const resultado = await lerComGemini(Buffer.from('foto'), 'chave-teste');
 
-  assert.deepEqual(resultado, { textoBruto: 'PARACETAMOL 750 mg', confianca: 95, modelo: 'gemini-2.5-flash-lite' });
-  assert.match(pedido.url, /\/models\/gemini-2\.5-flash-lite:generateContent$/);
+  assert.deepEqual(resultado, { textoBruto: 'PARACETAMOL 750 mg', confianca: 95, modelo: 'gemini-3.1-flash-lite' });
+  assert.match(pedido.url, /\/models\/gemini-3\.1-flash-lite:generateContent$/);
   assert.equal(pedido.opcoes.headers['x-goog-api-key'], 'chave-teste');
   const corpo = JSON.parse(pedido.opcoes.body);
   assert.equal(corpo.contents[0].parts[0].inline_data.data, Buffer.from('foto').toString('base64'));
