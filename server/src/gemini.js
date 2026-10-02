@@ -13,7 +13,7 @@
 // Modelos tentados em ordem. No plano grátis, um modelo às vezes fica
 // sobrecarregado (erro 503) ou atinge o limite (429); aí tentamos o próximo.
 // Dá para trocar no .env: GEMINI_MODELO=modelo1,modelo2
-const MODELOS_PADRAO = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest'];
+const MODELOS_PADRAO = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'];
 const URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // Erros em que vale tentar outro modelo: não encontrado, limite, sobrecarga
@@ -117,6 +117,10 @@ function montarPedido(imagem) {
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: ESQUEMA_RESPOSTA,
+      // Desliga o "pensamento" do modelo: para transcrever a foto ele não precisa
+      // raciocinar, e com ele ligado a leitura passava de 30 s. Medido em 02/10/2026
+      // com a bula de exemplo: gemini-3-flash-preview caiu de >30 s para 4,1 s.
+      thinkingConfig: { thinkingLevel: 'minimal' },
     },
   };
 }
