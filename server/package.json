@@ -9,7 +9,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test",
-    "medir": "node scripts/medir-acerto.js"
+    "medir": "node scripts/medir-acerto.js",
+    "testar-gemini": "node scripts/testar-gemini.js"
   },
   "engines": {
     "node": ">=18"

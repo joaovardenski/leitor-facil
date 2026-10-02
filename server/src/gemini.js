@@ -12,7 +12,12 @@
 
 const MODELO_PADRAO = 'gemini-3.5-flash-lite';
 const URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const TEMPO_LIMITE_MS = 30000;
+// Tempo máximo de espera (segundos), ajustável no .env com GEMINI_TEMPO_LIMITE.
+// Passou disso, o servidor desiste e usa o Tesseract.
+function tempoLimiteMs() {
+  const segundos = Number(process.env.GEMINI_TEMPO_LIMITE);
+  return (segundos > 0 ? segundos : 30) * 1000;
+}
 
 const PROMPT = `Você é um transcritor de documentos para pessoas com baixa visão.
 Transcreva TODO o texto visível na imagem, exatamente como está escrito, em português.
@@ -76,7 +81,7 @@ async function lerComGemini(imagem, chave = chaveGemini()) {
   };
 
   const controle = new AbortController();
-  const timer = setTimeout(() => controle.abort(), TEMPO_LIMITE_MS);
+  const timer = setTimeout(() => controle.abort(), tempoLimiteMs());
   let resposta;
   try {
     resposta = await fetch(`${URL_BASE}/${modeloGemini()}:generateContent`, {
