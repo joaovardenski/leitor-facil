@@ -87,7 +87,9 @@ O modelo de português do Tesseract vem junto no `npm install` (pacote `@tessera
    ```
    GEMINI_API_KEY=sua-chave-aqui
    ```
-3. Reinicie o servidor. Deve aparecer `Leitura: Gemini (gemini-3.5-flash-lite), com Tesseract de reserva.`
+3. Reinicie o servidor. Deve aparecer `Leitura: Gemini (gemini-2.5-flash-lite, ...), com Tesseract de reserva.`
+
+No plano grátis, os modelos do Gemini às vezes ficam sobrecarregados (erro 503) ou lentos. Por isso o servidor tenta uma **lista de modelos** em ordem e, se nenhum responder em **25 segundos**, usa o Tesseract. Para ver como o Gemini está respondendo agora (chave, modelos disponíveis e tempo de leitura), rode `npm run testar-gemini` na pasta `server`.
 
 O `.env` não vai para o GitHub: cada pessoa do grupo usa a própria chave. Nunca coloque a chave no app (`mobile/`), porque qualquer um conseguiria copiá-la. No mesmo `.env` dá para trocar o modelo (`GEMINI_MODELO`) ou usar o Google Cloud Vision (`GOOGLE_VISION_API_KEY`); veja os comentários do `.env.example`.
 

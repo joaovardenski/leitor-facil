@@ -1,14 +1,15 @@
 const path = require('path');
 const sharp = require('sharp');
 const { createWorker } = require('tesseract.js');
-const { lerComGemini, geminiConfigurado, modeloGemini } = require('./gemini');
+const { lerComGemini, geminiConfigurado, modelosGemini } = require('./gemini');
 const { lerComVision, visionConfigurado } = require('./vision');
 const { carregarCorretor, corrigirTexto } = require('./corretor');
 
 // Motores de leitura na nuvem. O Tesseract (local) é sempre a reserva.
+// larguraMaxima: tamanho da foto enviada (menor = envio mais rápido pelos dados do celular)
 const MOTORES_NUVEM = {
-  gemini: { ler: lerComGemini, configurado: geminiConfigurado },
-  'google-vision': { ler: lerComVision, configurado: visionConfigurado },
+  gemini: { ler: lerComGemini, configurado: geminiConfigurado, larguraMaxima: 2000 },
+  'google-vision': { ler: lerComVision, configurado: visionConfigurado, larguraMaxima: 3000 },
 };
 
 /**
@@ -29,7 +30,7 @@ function motorPadrao() {
 /** Texto para o terminal dizendo como o servidor vai ler as fotos. */
 function descreverMotor() {
   const motor = motorPadrao();
-  if (motor === 'gemini') return `Leitura: Gemini (${modeloGemini()}), com Tesseract de reserva.`;
+  if (motor === 'gemini') return `Leitura: Gemini (${modelosGemini().join(', ')}), com Tesseract de reserva.`;
   if (motor === 'google-vision') return 'Leitura: Google Vision, com Tesseract de reserva.';
   return 'Leitura: Tesseract. Para usar o Gemini, coloque GEMINI_API_KEY no server/.env.';
 }
@@ -92,11 +93,11 @@ async function tratarImagem(buffer) {
  * Prepara a foto para os motores na nuvem: só corrige a rotação e limita o tamanho.
  * Eles leem melhor a foto colorida original do que a versão tratada para o Tesseract.
  */
-async function prepararParaNuvem(buffer) {
+async function prepararParaNuvem(buffer, larguraMaxima = 3000) {
   try {
     return await sharp(buffer)
       .rotate()
-      .resize({ width: 3000, height: 3000, fit: 'inside', withoutEnlargement: true })
+      .resize({ width: larguraMaxima, height: larguraMaxima, fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 85 })
       .toBuffer();
   } catch {
@@ -201,11 +202,11 @@ async function lerImagem(buffer, opcoes = {}) {
     const motorNuvem = MOTORES_NUVEM[nomeMotor];
     if (!motorNuvem) throw new Error(`Motor de leitura desconhecido: "${nomeMotor}".`);
     // Imagem corrompida dá ImagemInvalidaError aqui, antes de chamar a API
-    const imagem = await prepararParaNuvem(buffer);
+    const imagem = await prepararParaNuvem(buffer, motorNuvem.larguraMaxima);
     try {
-      const { textoBruto, confianca } = await motorNuvem.ler(imagem);
+      const { textoBruto, confianca, modelo } = await motorNuvem.ler(imagem);
       resultado = { texto: limparTexto(textoBruto), confianca, correcoes: 0 };
-      motor = nomeMotor;
+      motor = modelo ? `${nomeMotor}/${modelo}` : nomeMotor;
     } catch (erro) {
       if (opcoes.motor) throw erro;
       console.warn(`${nomeMotor} falhou, usando o Tesseract. Motivo: ${erro.message}`);

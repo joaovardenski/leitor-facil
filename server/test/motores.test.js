@@ -3,13 +3,14 @@
 const { test, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { lerComGemini, interpretarRespostaGemini, modeloGemini } = require('../src/gemini');
+const { lerComGemini, interpretarRespostaGemini, modeloGemini, modelosGemini } = require('../src/gemini');
 const { interpretarRespostaVision } = require('../src/vision');
 
 const fetchOriginal = global.fetch;
 afterEach(() => {
   global.fetch = fetchOriginal;
   delete process.env.GEMINI_MODELO;
+  delete process.env.GEMINI_TEMPO_LIMITE;
 });
 
 const respostaGemini = (dados) => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(dados) }] } }] });
@@ -23,8 +24,8 @@ test('Gemini: envia a foto e a chave do jeito que a API espera', async () => {
 
   const resultado = await lerComGemini(Buffer.from('foto'), 'chave-teste');
 
-  assert.deepEqual(resultado, { textoBruto: 'PARACETAMOL 750 mg', confianca: 95 });
-  assert.match(pedido.url, /\/models\/gemini-3\.5-flash-lite:generateContent$/);
+  assert.deepEqual(resultado, { textoBruto: 'PARACETAMOL 750 mg', confianca: 95, modelo: 'gemini-2.5-flash-lite' });
+  assert.match(pedido.url, /\/models\/gemini-2\.5-flash-lite:generateContent$/);
   assert.equal(pedido.opcoes.headers['x-goog-api-key'], 'chave-teste');
   const corpo = JSON.parse(pedido.opcoes.body);
   assert.equal(corpo.contents[0].parts[0].inline_data.data, Buffer.from('foto').toString('base64'));
@@ -34,6 +35,46 @@ test('Gemini: envia a foto e a chave do jeito que a API espera', async () => {
 test('Gemini: o modelo pode ser trocado pelo .env', () => {
   process.env.GEMINI_MODELO = 'gemini-3.8-flash';
   assert.equal(modeloGemini(), 'gemini-3.8-flash');
+  process.env.GEMINI_MODELO = 'modelo-a, modelo-b';
+  assert.deepEqual(modelosGemini(), ['modelo-a', 'modelo-b']);
+});
+
+test('Gemini: modelo sobrecarregado (503) passa para o próximo da lista', async () => {
+  process.env.GEMINI_MODELO = 'modelo-a,modelo-b';
+  const tentados = [];
+  global.fetch = async (url) => {
+    tentados.push(url.match(/models\/(.+):generateContent/)[1]);
+    if (tentados.length === 1) {
+      return new Response(JSON.stringify({ error: { message: 'high demand' } }), { status: 503 });
+    }
+    return new Response(JSON.stringify(respostaGemini({ texto: 'ok ok', legibilidade: 'boa' })));
+  };
+  const resultado = await lerComGemini(Buffer.from('x'), 'c');
+  assert.deepEqual(tentados, ['modelo-a', 'modelo-b']);
+  assert.equal(resultado.modelo, 'modelo-b');
+});
+
+test('Gemini: chave inválida (400) não tenta outros modelos', async () => {
+  process.env.GEMINI_MODELO = 'modelo-a,modelo-b';
+  let tentativas = 0;
+  global.fetch = async () => {
+    tentativas++;
+    return new Response(JSON.stringify({ error: { message: 'API key not valid' } }), { status: 400 });
+  };
+  await assert.rejects(lerComGemini(Buffer.from('x'), 'c'), /400: API key not valid/);
+  assert.equal(tentativas, 1);
+});
+
+test('Gemini: respeita o prazo total e desiste', async () => {
+  process.env.GEMINI_MODELO = 'modelo-a,modelo-b';
+  process.env.GEMINI_TEMPO_LIMITE = '0.3';
+  global.fetch = (url, opcoes) =>
+    new Promise((resolve, reject) => {
+      opcoes.signal.addEventListener('abort', () => reject(Object.assign(new Error('abortado'), { name: 'AbortError' })));
+    });
+  const inicio = Date.now();
+  await assert.rejects(lerComGemini(Buffer.from('x'), 'c'));
+  assert.ok(Date.now() - inicio < 2000, 'deveria desistir rápido');
 });
 
 test('Gemini: legibilidade vira confiança, e [ilegível] força o aviso', () => {

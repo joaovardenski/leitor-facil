@@ -10,13 +10,23 @@
 // ou nomes de remédio; esses viram [ilegível]. Ele também diz o quanto a foto
 // estava legível, o que vira a "confiança" usada no aviso do app.
 
-const MODELO_PADRAO = 'gemini-3.5-flash-lite';
+// Modelos tentados em ordem. No plano grátis, um modelo às vezes fica
+// sobrecarregado (erro 503) ou atinge o limite (429); aí tentamos o próximo.
+// Dá para trocar no .env: GEMINI_MODELO=modelo1,modelo2
+const MODELOS_PADRAO = ['gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'];
 const URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-// Tempo máximo de espera (segundos), ajustável no .env com GEMINI_TEMPO_LIMITE.
-// Passou disso, o servidor desiste e usa o Tesseract.
+
+// Erros em que vale tentar outro modelo: não encontrado, limite, sobrecarga
+const STATUS_TENTAR_OUTRO = new Set([404, 429, 500, 503]);
+// Se sobrar menos que isso do prazo, não adianta tentar outro modelo
+const TEMPO_MINIMO_TENTATIVA_MS = 4000;
+
+// Prazo TOTAL para o Gemini (somando as tentativas), ajustável no .env com
+// GEMINI_TEMPO_LIMITE (segundos). Passou disso, o servidor usa o Tesseract:
+// quem está esperando o texto não pode ficar quase um minuto olhando a tela.
 function tempoLimiteMs() {
   const segundos = Number(process.env.GEMINI_TEMPO_LIMITE);
-  return (segundos > 0 ? segundos : 30) * 1000;
+  return (segundos > 0 ? segundos : 25) * 1000;
 }
 
 const PROMPT = `Você é um transcritor de documentos para pessoas com baixa visão.
@@ -56,18 +66,48 @@ function geminiConfigurado() {
   return chaveGemini() !== null;
 }
 
+/** Lista de modelos a tentar, em ordem. */
+function modelosGemini() {
+  const doEnv = (process.env.GEMINI_MODELO || '')
+    .split(',')
+    .map((m) => m.trim())
+    .filter(Boolean);
+  return doEnv.length ? doEnv : MODELOS_PADRAO;
+}
+
+/** Primeiro modelo da lista (para mostrar no terminal). */
 function modeloGemini() {
-  return (process.env.GEMINI_MODELO || '').trim() || MODELO_PADRAO;
+  return modelosGemini()[0];
 }
 
 /**
- * Envia a imagem (Buffer JPEG) para o Gemini e devolve { textoBruto, confianca }.
- * Lança erro se a API falhar, para o servidor poder cair no Tesseract.
+ * Envia a imagem (Buffer JPEG) para o Gemini e devolve { textoBruto, confianca, modelo }.
+ * Se um modelo estiver sobrecarregado, tenta o próximo, dentro do prazo total.
+ * Lança erro se nenhum der certo, para o servidor poder cair no Tesseract.
  */
 async function lerComGemini(imagem, chave = chaveGemini()) {
   if (!chave) throw new Error('GEMINI_API_KEY não configurada.');
 
-  const corpo = {
+  const corpo = JSON.stringify(montarPedido(imagem));
+  const prazo = Date.now() + tempoLimiteMs();
+  const falhas = [];
+
+  for (const modelo of modelosGemini()) {
+    const restante = prazo - Date.now();
+    if (restante < TEMPO_MINIMO_TENTATIVA_MS) break;
+    try {
+      const json = await pedirAoModelo(modelo, corpo, chave, restante);
+      return { ...interpretarRespostaGemini(json), modelo };
+    } catch (erro) {
+      falhas.push(`${modelo}: ${erro.message}`);
+      if (!erro.tentarOutro) break;
+    }
+  }
+  throw new Error(falhas.length ? falhas.join(' | ') : 'Gemini: sem tempo para tentar.');
+}
+
+function montarPedido(imagem) {
+  return {
     contents: [
       {
         role: 'user',
@@ -79,31 +119,34 @@ async function lerComGemini(imagem, chave = chaveGemini()) {
       responseSchema: ESQUEMA_RESPOSTA,
     },
   };
+}
 
+/** Um pedido a um modelo. Erros que valem outra tentativa vêm com tentarOutro = true. */
+async function pedirAoModelo(modelo, corpo, chave, limiteMs) {
   const controle = new AbortController();
-  const timer = setTimeout(() => controle.abort(), tempoLimiteMs());
-  let resposta;
+  const timer = setTimeout(() => controle.abort(), limiteMs);
   try {
-    resposta = await fetch(`${URL_BASE}/${modeloGemini()}:generateContent`, {
+    const resposta = await fetch(`${URL_BASE}/${modelo}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': chave },
-      body: JSON.stringify(corpo),
+      body: corpo,
       signal: controle.signal,
     });
+    const json = await resposta.json().catch(() => ({}));
+    if (!resposta.ok) {
+      // 503 = modelo sobrecarregado; 429 = limite do plano grátis (por minuto ou por dia)
+      const erro = new Error(`Gemini respondeu ${resposta.status}: ${json.error?.message || 'erro desconhecido'}`);
+      erro.tentarOutro = STATUS_TENTAR_OUTRO.has(resposta.status);
+      throw erro;
+    }
+    return json;
   } catch (erro) {
-    throw new Error(
-      erro.name === 'AbortError' ? 'Gemini demorou demais para responder.' : `Sem conexão com o Gemini (${erro.message}).`
-    );
+    if (erro.name === 'AbortError') throw new Error('Gemini demorou demais para responder.');
+    if (erro.tentarOutro !== undefined) throw erro;
+    throw new Error(`Sem conexão com o Gemini (${erro.message}).`);
   } finally {
     clearTimeout(timer);
   }
-
-  const json = await resposta.json().catch(() => ({}));
-  if (!resposta.ok) {
-    // 429 = limite do plano grátis atingido (por minuto ou por dia)
-    throw new Error(`Gemini respondeu ${resposta.status}: ${json.error?.message || 'erro desconhecido'}`);
-  }
-  return interpretarRespostaGemini(json);
 }
 
 /**
@@ -140,4 +183,4 @@ function interpretarRespostaGemini(json) {
   return { textoBruto, confianca };
 }
 
-module.exports = { lerComGemini, geminiConfigurado, modeloGemini, interpretarRespostaGemini };
+module.exports = { lerComGemini, geminiConfigurado, modeloGemini, modelosGemini, interpretarRespostaGemini };
